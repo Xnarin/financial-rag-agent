@@ -2,6 +2,19 @@
 
 > 금융 문서 PDF 23개를 검색해서 **근거(파일명·페이지)와 함께 답하는 RAG Agent** 팀 프로젝트
 
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?logo=langchain&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini-8E75B2?logo=googlegemini&logoColor=white)
+![Chroma](https://img.shields.io/badge/Chroma-FF6446)
+![RAGAS](https://img.shields.io/badge/RAGAS-4B32C3)
+
+| 항목 | 내용 |
+|:---|:---|
+| 기간 | 2026.10.20 ~ 2026.10.22 (3일) |
+| 형태 | RAG Agent 실습 과제, 3인 실습 |
+| 진행 방식 | 설계 방향(파이프라인, 추출·청킹·검색 기준)은 3명이 함께 논의해 결정 |
+| AI 도구 | Claude(Claude Code)만 사용 |
+
 과제 설명 원문은 [docs/assignment.md](docs/assignment.md)에 있어요.
 
 <br>
