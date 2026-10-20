@@ -10,9 +10,9 @@
 
 | 단계 | 상태 | 내용 |
 |:---|:---:|:---|
-| 1. 문서 추출 | ✅ 완료 | PDF → 페이지별 본문 + 마크다운 표 |
-| 2. 청킹 · 임베딩 | ⏳ 다음 | [docs/chunking_todo.md](docs/chunking_todo.md)에 할 일 정리 |
-| 3. 검색 도구 | ⬜ | 상위 k개 청크 + ID·출처 반환 |
+| 1. 문서 추출 | ✅ 완료 | PDF → 페이지별 본문 + 마크다운 표 + 그래프·그림·수식 해석 |
+| 2. 청킹 · 임베딩 | ✅ 완료 | 구조 반영 청킹 300/50, 500/60 → `gemini-embedding-2` → Chroma |
+| 3. 검색 도구 | ⏳ 다음 | 상위 k개 청크 + ID·출처 반환 |
 | 4. Agent 설계 | ⬜ | 판단·행동 흐름, 종료 조건 |
 | 5. 평가 루프 | ⬜ | 지표, 골든셋, 비교 실험 |
 
@@ -42,6 +42,15 @@ financial-rag-agent/
 │   ├── 02_make_review_md.py #   ② 원문 캡처와 추출 결과 비교 문서
 │   ├── 03_gemini_tables.py  #   ③ 깨진 표만 Gemini로 다시 뽑기 (숫자 검증)
 │   └── 04_image_regions.py  #   ④ 그래프·그림·다이어그램·수식 (rapid-layout → Gemini/OCR)
+├── 06_chunks/               # 청크 결과 (설정별 jsonl)
+│   ├── chunks_300_50.jsonl  #   3,013개
+│   └── chunks_500_60.jsonl  #   1,916개
+├── indexing/                # 청킹·임베딩 스크립트 (번호 = 실행 순서)
+│   ├── 01_chunk.py          #   ① pages.jsonl → 구조 반영 청크
+│   ├── 02_embed.py          #   ② 청크 → gemini-embedding-2 → Chroma
+│   ├── 03_search_test.py    #   ③ 두 설정에 같은 질문 던져 비교
+│   └── common.py            #   벡터 DB 위치·임베딩 모델 설정
+├── chroma_db/               # 벡터 DB (커밋 안 함, 02_embed.py로 생성 — 한글 경로면 다른 곳, 아래 참고)
 ├── docs/
 │   ├── assignment.md        # 과제 설명
 │   ├── chunking_todo.md     # 청킹 단계에서 해결할 것
@@ -85,6 +94,41 @@ python extraction/02_make_review_md.py   # image_check.md(검토 목록)도 같�
 ```
 
 > OpenCV는 Windows에서 **한글 경로에 파일을 저장하지 못해요.** 시각화 저장이 안 되면 경로를 확인하세요.
+
+<br>
+
+## 🧱 청킹 · 임베딩
+
+```bash
+pip install langchain-text-splitters langchain-chroma
+python indexing/01_chunk.py        # 06_chunks/chunks_300_50.jsonl, chunks_500_60.jsonl (1분 이내)
+python indexing/02_embed.py        # chroma_db/ 생성 (약 5~10분, 이미 넣은 청크는 건너뜀)
+python indexing/03_search_test.py  # 두 설정 검색 비교 (질문을 인자로 넣을 수도 있음)
+```
+
+> ⚠️ **Windows에서 프로젝트 경로에 한글이 있으면** Chroma가 색인 파일(`.bin`)을 저장하지 못해서 다시 열 때 `Error loading hnsw index`가 나요.
+> 그래서 경로에 한글이 있으면 자동으로 `C:/Users/Public/financial-rag-agent/chroma_db`에 저장해요(실행 시 알림).
+> 다른 곳에 두려면 `.env`에 `CHROMA_DIR=영문경로`를 넣으세요.
+
+**비교 실험 설정** (나머지는 모두 같음)
+
+| 설정 | 크기 / 겹침 (글자) | 청크 수 | 길이 중앙값 |
+|:---|:---:|---:|---:|
+| `chunks_300_50` | 300 / 50 | 3,013 | 269 |
+| `chunks_500_60` | 500 / 60 | 1,916 | 437 |
+
+**공통 전처리 (구조 반영 분할)**
+
+| 대상 | 처리 |
+|:---|:---|
+| 머리글·꼬리말 | 쪽 번호, 반복 제목, 한국은행 경고문 등 쪽 위·아래 반복 줄 삭제 |
+| 표 | 바로 위 제목·단위 줄(짧은 제목 덩어리 포함) + 바로 아래 각주(주·자료·출처·*·※)와 묶음. 크기를 넘으면 **행 단위로 나누고 조각마다 제목·헤더 반복** |
+| 그래프·그림·수식 | 쪼개지 않고 통째로 한 청크 (설명 문장 포함) |
+| 본문 | `RecursiveCharacterTextSplitter`, **쪽 단위**로 나눔 (출처 쪽 번호 정확) |
+
+**청크 메타데이터:** `chunk_id`, `source`, `page`, `doc_group`(`glossary` / `standard_terms` / `life_guide` / `additional`), `block_type`(`text` / `table` / `figure`)
+
+> 기본 negative 세트는 **용어집 + 약관만 검색**하는 조건이라 `doc_group`으로 필터해서 써요.
 
 <br>
 
