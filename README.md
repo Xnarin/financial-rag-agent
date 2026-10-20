@@ -31,8 +31,10 @@ financial-rag-agent/
 ├── 03_answers/              # 기준 답안 (강의 제공)
 ├── 01_extract.py            # ① PDF → 본문·표 추출
 ├── 02_make_review_md.py     # ② 원문 캡처와 추출 결과 비교 문서 생성
+├── 03_gemini_tables.py      # ③ 깨진 표만 Gemini로 다시 뽑기 (숫자 검증)
 ├── 04_extracted/            # 추출 결과
 │   ├── pages.jsonl          #   쪽마다 한 줄
+│   ├── gemini_tables.json   #   Gemini로 다시 뽑은 표 + 검증 결과
 │   ├── index.md             #   문서별 요약 + 비교 문서 링크
 │   └── review/              #   문서별 비교 md + 쪽 캡처
 ├── docs/
@@ -46,12 +48,24 @@ financial-rag-agent/
 ## 🚀 실행 방법
 
 ```bash
-pip install pdfplumber        # 0.11.10에서 확인
+pip install pdfplumber python-dotenv langchain-google-genai
 python 01_extract.py          # 04_extracted/pages.jsonl 생성 (약 1~2분)
 python 02_make_review_md.py   # 04_extracted/index.md, review/*.md 생성
 ```
 
 > `01_extract.py`를 고쳤다면 `02_make_review_md.py`도 다시 돌려야 비교 문서에 반영돼요.
+
+**Gemini로 표 다시 뽑기 (선택)**
+
+pdfplumber로 안 되는 표는 `03_gemini_tables.py`의 `TARGETS`에 문서·쪽·영역을 적고 돌려요.
+결과(`04_extracted/gemini_tables.json`)는 이미 레포에 있어서, **새 표를 추가할 때만** 필요해요.
+
+```bash
+# .env 에 GEMINI_API_KEY=... 필요 (.env는 커밋하지 않음)
+python 03_gemini_tables.py    # 표 영역 캡처 → Gemini → 숫자 검증
+python 01_extract.py          # 검증 통과한 표를 pdfplumber 표 대신 사용
+python 02_make_review_md.py
+```
 
 <br>
 
@@ -65,6 +79,7 @@ python 02_make_review_md.py   # 04_extracted/index.md, review/*.md 생성
   "page": 12,
   "text": "표를 뺀 본문",
   "tables": ["| 구분 | 2021 | ... |\n| --- | --- | ... |\n..."],
+  "table_sources": ["pdfplumber"],
   "content": "본문과 표를 위→아래 읽는 순서대로 합친 것"
 }
 ```
@@ -75,9 +90,10 @@ python 02_make_review_md.py   # 04_extracted/index.md, review/*.md 생성
 | `page` | 1부터 시작하는 쪽 번호 | 답변의 출처 표시 |
 | `text` | 표 영역을 뺀 본문 | 본문만 필요할 때 |
 | `tables` | 그 쪽의 마크다운 표 목록 | 표만 따로 다룰 때 |
+| `table_sources` | 표마다 `pdfplumber` 또는 `gemini` | 평가 때 Gemini 표가 원인인지 구분 |
 | `content` | 본문 + 표 (읽는 순서) | **청킹에는 이걸 사용** |
 
-**현재 수치:** 23개 문서 · 490쪽 · 표 167개 · 글자가 거의 없는 쪽(표지·간지) 24쪽
+**현재 수치:** 23개 문서 · 490쪽 · 표 168개(그중 Gemini 3개) · 글자가 거의 없는 쪽(표지·간지) 24쪽
 
 <br>
 
@@ -99,6 +115,7 @@ pdfplumber의 기본 표 인식(`find_tables`)만으로는 실제 문서의 표�
 | 두 쪽을 펼친 페이지에서 좌우 문장이 섞임 | 왼쪽 반 / 오른쪽 반을 따로 추출 |
 | 배경 상자 때문에 같은 표가 두 번 나옴 | 절반 넘게 겹치는 표는 중복으로 제거 |
 | `(cid:49049)` 같은 깨진 기호 | `→`로 치환 |
+| 위 규칙으로도 안 되는 표·수식 | 표 영역 캡처를 Gemini로 다시 뽑고, **숫자가 원문에 있는지 검증**한 것만 사용 |
 
 <br>
 

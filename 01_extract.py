@@ -9,6 +9,7 @@ BASE = Path(__file__).parent
 DATA_DIR = BASE / "01_data"
 OUT_PATH = BASE / "04_extracted" / "pages.jsonl"
 OUT_PATH.parent.mkdir(exist_ok=True)
+GEMINI_PATH = BASE / "04_extracted" / "gemini_tables.json"  # 03_gemini_tables.py 결과
 
 # 폰트에 글자 정보가 없는 기호는 (cid:49049)처럼 나온다. 이 자료에서는 전부 화살표라서 →로 바꾼다.
 CID = re.compile(r"\(cid:\d+\)")
@@ -231,8 +232,15 @@ def outside(bboxes):
     return keep
 
 
-def extract_page(page):
-    tables = []
+def extract_page(page, gemini=()):
+    # Gemini로 다시 뽑은 표(숫자 검증 통과)를 먼저 넣는다. 이 쪽(펼친 페이지면 이 반쪽)에 글자가 있는 것만.
+    # 아래 중복 제거 때문에 같은 자리의 pdfplumber 표는 자동으로 빠진다.
+    tables = [
+        {"bbox": tuple(g["bbox"]), "markdown": g["markdown"], "from": "gemini"}
+        for g in gemini
+        if any(g["bbox"][0] <= (c["x0"] + c["x1"]) / 2 <= g["bbox"][2]
+               and g["bbox"][1] <= (c["top"] + c["bottom"]) / 2 <= g["bbox"][3] for c in page.chars)
+    ]
     dotted, v_dotted = dotted_lines(page)
     guides = tree_guides(dotted, v_dotted)
     found = page.find_tables({"explicit_horizontal_lines": dotted})
@@ -247,7 +255,7 @@ def extract_page(page):
             continue
         markdown = table_to_markdown(add_hierarchy(page, t, fill_merged_cells(t), guides))
         if markdown:
-            tables.append({"bbox": t.bbox, "markdown": markdown})
+            tables.append({"bbox": t.bbox, "markdown": markdown, "from": "pdfplumber"})
     tables.sort(key=lambda t: t["bbox"][1])
 
     # 본문: 표 영역을 뺀 나머지 글자
@@ -262,41 +270,46 @@ def extract_page(page):
     return {
         "text": CID.sub("→", body_page.extract_text() or ""),
         "tables": [t["markdown"] for t in tables],
+        "table_sources": [t["from"] for t in tables],
         "content": content,
     }
 
 
-def extract_spread(page):
+def extract_spread(page, gemini=()):
     # 두 쪽을 펼쳐서 한 장에 담은 가로로 긴 쪽은 왼쪽 반, 오른쪽 반을 따로 읽고 이어 붙인다.
     # 한 번에 읽으면 위→아래 순서로 정렬되면서 왼쪽 쪽과 오른쪽 쪽 문장이 섞인다.
     if page.width <= page.height:
-        return extract_page(page)
+        return extract_page(page, gemini)
     # crop으로 자르면 그 안에서 표 영역을 다시 crop할 때 곡선 테두리가 사라져서,
     # 객체 가운데가 어느 쪽에 있는지로 나눈다.
     mid = (page.bbox[0] + page.bbox[2]) / 2
     halves = [
-        extract_page(page.filter(lambda o: ((o["x0"] + o["x1"]) / 2 < mid) == is_left))
+        extract_page(page.filter(lambda o: ((o["x0"] + o["x1"]) / 2 < mid) == is_left), gemini)
         for is_left in (True, False)
     ]
     return {
         "text": "\n".join(h["text"] for h in halves).strip(),
         "tables": [t for h in halves for t in h["tables"]],
+        "table_sources": [s for h in halves for s in h["table_sources"]],
         "content": "\n\n".join(h["content"] for h in halves).strip(),
     }
 
 
 pdf_paths = sorted(DATA_DIR.rglob("*.pdf"))
 
+gemini_tables = defaultdict(list)  # (문서, 쪽) → 숫자 검증을 통과한 Gemini 표
+if GEMINI_PATH.exists():
+    for g in json.loads(GEMINI_PATH.read_text(encoding="utf-8")):
+        if g["status"] == "ok":
+            gemini_tables[(g["source"], g["page"])].append(g)
+
 with open(OUT_PATH, "w", encoding="utf-8") as f:
     for pdf_path in pdf_paths:
         n_tables = 0
         with pdfplumber.open(pdf_path) as pdf:
             for i, page in enumerate(pdf.pages, start=1):
-                row = {
-                    "source": str(pdf_path.relative_to(DATA_DIR)).replace("\\", "/"),
-                    "page": i,
-                    **extract_spread(page),
-                }
+                source = str(pdf_path.relative_to(DATA_DIR)).replace("\\", "/")
+                row = {"source": source, "page": i, **extract_spread(page, gemini_tables[(source, i)])}
                 n_tables += len(row["tables"])
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
         print(f"{pdf_path.name}: {len(pdf.pages)}쪽, 표 {n_tables}개")

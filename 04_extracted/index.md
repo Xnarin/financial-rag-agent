@@ -2,7 +2,7 @@
 
 | 문서 | 쪽수 | 표 | 거의 빈 쪽 | 비교 문서 |
 |---|---|---|---|---|
-| additional/housing_pension_2026.pdf | 119 | 21 | 15 | [보기](review/housing_pension_2026.md) |
+| additional/housing_pension_2026.pdf | 119 | 22 | 15 | [보기](review/housing_pension_2026.md) |
 | additional/housing_policy_finance_2025.pdf | 22 | 5 | 0 | [보기](review/housing_policy_finance_2025.md) |
 | additional/insurance_terms_example_2020.pdf | 9 | 7 | 1 | [보기](review/insurance_terms_example_2020.md) |
 | additional/policy_finance_debt_adjustment_2026.pdf | 122 | 83 | 7 | [보기](review/policy_finance_debt_adjustment_2026.md) |
