@@ -31,8 +31,12 @@ def main():
     embeddings = get_embeddings()
     for path in sorted(CHUNK_DIR.glob("chunks_*.jsonl")):
         name = path.stem  # chunks_300_50
-        store = Chroma(collection_name=name, embedding_function=embeddings, persist_directory=str(persist_dir))
         docs = load_chunks(path)
+        # Chroma는 HNSW 색인을 sync_threshold(기본 1000)개마다만 디스크에 쓴다. 나머지는 로그에 남았다가 열 때 다시 채우는데,
+        # 이 상태에서 검색 결과가 같은 질문에도 바뀌었다(회고 참고). 청크 수로 맞춰 다 넣은 순간 한 번에 저장되게 한다.
+        # ponytail: 컬렉션 만들 때만 적용됨, 중간에 끊긴 뒤 이어 넣으면 다시 안 맞을 수 있음 → chroma_db 지우고 처음부터
+        store = Chroma(collection_name=name, embedding_function=embeddings, persist_directory=str(persist_dir),
+                       collection_metadata={"hnsw:batch_size": len(docs), "hnsw:sync_threshold": len(docs)})
         existing = set(store.get(include=[])["ids"])
         todo = [d for d in docs if d.id not in existing]
         print(f"{name}: 청크 {len(docs)}개 중 새로 임베딩 {len(todo)}개")

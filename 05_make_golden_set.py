@@ -1,6 +1,8 @@
 # 03_answers의 180문항에서 20문항을 골라 평가용 골든셋을 만든다.
 # 추가 PDF 6 + 생활 가이드 4 + 용어사전 2 + 표준약관 2 + 거절 문항 6 = 20
+# 180문항 전체도 같은 형식으로 golden_set_provided.jsonl에 저장한다.
 import json
+import re
 
 def load(name):
     with open(f"03_answers/{name}.jsonl", encoding="utf-8") as f:
@@ -62,10 +64,11 @@ def source_group(r):
         return "life_guide"
     return "none"  # 근거 문서가 없는 거절 문항
 
-golden = [{
+def to_golden(r, context_type):
+    return {
     "case_id": r["case_id"],
     "source_group": source_group(r),
-    "context_type": CONTEXT_TYPE[r["case_id"]],
+    "context_type": context_type,
     "set": r["set"],
     "category": r["category"],
     "difficulty": r["difficulty"],
@@ -77,11 +80,42 @@ golden = [{
     "expected_behavior": r["expected_behavior"],
     "must_include": r["must_include"],
     "must_not_include": r["must_not_include"],
-} for r in picked]
+}
 
+golden = [to_golden(r, CONTEXT_TYPE[r["case_id"]]) for r in picked]
 assert len(golden) == 20 and len({g["case_id"] for g in golden}) == 20
 
-with open("05_golden_set/golden_set.jsonl", "w", encoding="utf-8") as f:
-    for g in golden:
-        f.write(json.dumps(g, ensure_ascii=False) + "\n")
-print(f"{len(golden)}문항 저장")
+
+# 제공 180문항 전체 → golden_set_provided.jsonl
+# 근거 유형은 위 20문항만 직접 붙였으므로 나머지는 자동으로 추정한다.
+pages = {}
+for line in open("04_extracted/pages.jsonl", encoding="utf-8"):
+    p = json.loads(line)
+    pages[(p["source"].split("/")[-1], p["page"])] = p
+
+def numbers(text):
+    return {n.replace(",", "") for n in re.findall(r"\d[\d,.]*\d", text)}
+
+def guess_context_type(r):
+    # ponytail: 답의 숫자가 본문엔 없고 표/그림에만 있으면 table/image, 아니면 paragraph. 숫자 없는 표 문항은 paragraph로 잘못 붙음
+    if r["case_id"] in CONTEXT_TYPE:
+        return CONTEXT_TYPE[r["case_id"]]
+    if not r["expected_source_ids"] and not r.get("source_pages"):
+        return "none"
+    ps = [pages.get((file_name(r), n)) for n in r.get("source_pages") or []]
+    ps = [p for p in ps if p]
+    missing = numbers(r["reference_answer"]) - numbers(" ".join(p["text"] for p in ps).replace(",", ""))
+    if missing & numbers(" ".join(t for p in ps for t in p["tables"])):
+        return "table"
+    if missing & numbers(" ".join(f["markdown"] for p in ps for f in p["figures"])):
+        return "image"
+    return "paragraph"
+
+provided = [to_golden(r, guess_context_type(r)) for r in rows.values()]
+assert len(provided) == 180
+
+for path, data in (("05_golden_set/golden_set.jsonl", golden), ("05_golden_set/golden_set_provided.jsonl", provided)):
+    with open(path, "w", encoding="utf-8") as f:
+        for g in data:
+            f.write(json.dumps(g, ensure_ascii=False) + "\n")
+    print(f"{path}: {len(data)}문항 저장")

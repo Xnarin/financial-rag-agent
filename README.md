@@ -12,9 +12,9 @@
 |:---|:---:|:---|
 | 1. 문서 추출 | ✅ 완료 | PDF → 페이지별 본문 + 마크다운 표 + 그래프·그림·수식 해석 |
 | 2. 청킹 · 임베딩 | ✅ 완료 | 구조 반영 청킹 300/50, 500/60 → `gemini-embedding-2` → Chroma |
-| 3. 검색 도구 | ⏳ 다음 | 상위 k개 청크 + ID·출처 반환 |
+| 3. 검색 도구 | ⏳ 다음 | **300/50 + Hybrid로 확정** → 상위 k개 청크 + ID·출처 반환 |
 | 4. Agent 설계 | ⬜ | 판단·행동 흐름, 종료 조건 |
-| 5. 평가 루프 | ⏳ 진행 | 검색 평가 완료 (골든셋 16문항, 청킹 2 × 검색 4) → 답변 평가 남음 |
+| 5. 평가 루프 | ⏳ 진행 | 검색 평가 완료 (골든셋 4종 437문항, 청킹 2 × 검색 4) → 답변 평가 남음 |
 
 <br>
 
@@ -37,6 +37,8 @@ financial-rag-agent/
 │   ├── gemini_tables.json   #   Gemini로 다시 뽑은 표 + 검증 결과
 │   ├── layout.json          #   rapid-layout 영역 분석 결과 (490쪽)
 │   └── image_regions.json   #   그림 영역 해석 + 검증 결과
+├── 05_golden_set/           # 검색 평가용 골든셋 (아래 "검색 평가" 참고)
+├── 05_make_golden_set.py    # 03_answers → golden_set(20문항 표본) + golden_set_provided(180문항 전체)
 ├── extraction/              # 추출 스크립트 (번호 = 실행 순서)
 │   ├── 01_extract.py        #   ① PDF → 본문·표·그림 해석 합치기 → pages.jsonl
 │   ├── 02_make_review_md.py #   ② 원문 캡처와 추출 결과 비교 문서
@@ -58,7 +60,7 @@ financial-rag-agent/
 │   ├── assignment.md        # 과제 설명
 │   ├── chunking_todo.md     # 청킹 단계에서 해결할 것
 │   └── 비용추정.md          # 추출 단계 Gemini 비용 (약 $1.8)
-└── 회고.md                  # 추출 단계에서 만난 문제와 해결 과정
+└── 회고.md                  # 단계마다 만난 문제와 해결 과정
 ```
 
 <br>
@@ -112,6 +114,9 @@ python indexing/03_search_test.py  # 두 설정 검색 비교 (질문을 인자�
 > ⚠️ **Windows에서 프로젝트 경로에 한글이 있으면** Chroma가 색인 파일(`.bin`)을 저장하지 못해서 다시 열 때 `Error loading hnsw index`가 나요.
 > 그래서 경로에 한글이 있으면 자동으로 `C:/Users/Public/financial-rag-agent/chroma_db`에 저장해요(실행 시 알림).
 > 다른 곳에 두려면 `.env`에 `CHROMA_DIR=영문경로`를 넣으세요.
+>
+> ⚠️ Chroma는 HNSW 색인을 1,000개 단위로만 디스크에 써서, 나머지가 로그에만 남으면 **같은 질문의 검색 결과가 바뀌었어요**([회고](회고.md) 15번).
+> `02_embed.py`는 컬렉션을 만들 때 청크 수만큼 모았다가 한 번에 저장하게 설정해요. 중간에 끊겼다면 `chroma_db`를 지우고 처음부터 돌리세요.
 
 **비교 실험 설정** (나머지는 모두 같음)
 
@@ -139,27 +144,60 @@ python indexing/03_search_test.py  # 두 설정 검색 비교 (질문을 인자�
 
 ```bash
 pip install kiwipiepy rank-bm25 langchain-classic langchain-community
-python evaluation/01_retrieval_eval.py   # 07_eval/retrieval_chunks_*.txt, retrieval_rows.jsonl
+python evaluation/01_retrieval_eval.py                    # 05_golden_set/*.jsonl 전부 (파일마다 따로)
+python evaluation/01_retrieval_eval.py 05_golden_set/xxx.jsonl
 ```
 
-- 골든셋 20문항 중 **16문항** 평가 (정답 문서가 없는 거절 문항 4개 제외), 난이도 basic → easy, intermediate → medium, advanced·adversarial → hard
-- 정답: 문서 + 쪽 (약관 `kofia-terms-…-{버전}-{조}`는 버전으로 약관 파일, 조로 쪽을 찾음 / 용어집은 쪽 정보가 없어 파일 단위)
-- 검색 설정은 강의 스크립트와 같음: k=5, fetch_k=20, MMR λ=0.5, Hybrid 0.5:0.5, BM25는 Kiwi 토큰화
+> `kiwipiepy`가 없다는 오류가 나면 패키지를 설치한 가상환경의 파이썬으로 실행하세요 (예: `../../.venv/Scripts/python.exe evaluation/01_retrieval_eval.py`).
 
-**전체 16문항 평균**
+- 결과: `07_eval/{골든셋 이름}/retrieval_{청킹}.txt`(난이도별), `..._by_type.txt`(근거 유형별), `retrieval_rows.jsonl`(질문별)
+- 정답: 문서 + 쪽 (약관 `kofia-terms-…-{버전}-{조}`는 버전 → 약관 파일, 조 → 쪽 / 용어집은 파일 단위 / 정답 문서 없는 문항은 제외)
+- 검색 설정은 강의 스크립트와 같음: k=5, fetch_k=20, MMR λ=0.5, Hybrid 0.5:0.5, BM25는 Kiwi 토큰화
+- latency는 질문 임베딩을 뺀 **순수 검색 시간** (질문 임베딩은 한 번만 만들어 모든 방식이 공유)
+
+| 골든셋 | 문항 (평가) | 근거 유형 | 만든 방법 |
+|:---|---:|:---|:---|
+| `golden_set_table_image` | 189 | table 109 · image 58 · formula 18 · paragraph 2 · none 2 | 직접 작성 (표·그림·수식) |
+| `golden_set_paragraph` | 100 | paragraph 98 · none 2 | 직접 작성 (본문 문단, 23개 문서 전체) |
+| `golden_set_provided` | 180 (148) | paragraph 135 · table 11 · image 2 · none 32 | 강의 제공 03_answers 전체를 변환 |
+| `golden_set` | 20 (16) | paragraph 11 · table 3 · image 2 · none 4 | 제공 문항 중 20개 표본 (`provided`에 포함) |
+| `golden_set_all` | 469 (437) | paragraph 235 · table 120 · image 60 · formula 18 · none 4 | table_image + paragraph + provided 합침 |
+
+- 괄호 = 정답 문서가 있어서 검색 평가에 들어간 문항 수
+- `provided`의 근거 유형은 20문항만 직접 붙였고 나머지는 **자동 추정**(답의 숫자가 본문엔 없고 표/그림에만 있으면 table/image)
+- `golden_set_all`은 파일로 두지 않고 세 파일을 이어 붙여 평가했어요 (`05_golden_set/`에 두면 기본 실행 때 중복 평가됨)
+
+**`golden_set_all` 437문항**
 
 | 청킹 | 검색 | hit@1 | hit@5 | recall@5 | MRR |
 |:---|:---|---:|---:|---:|---:|
-| 300/50 | Similarity | 0.438 | 0.938 | 0.781 | 0.656 |
-| 300/50 | MMR | 0.438 | 0.812 | 0.688 | 0.604 |
-| 300/50 | BM25 | 0.500 | 0.688 | 0.531 | 0.578 |
-| **300/50** | **Hybrid** | **0.562** | **0.938** | **0.844** | **0.740** |
-| 500/60 | Similarity | 0.375 | 0.750 | 0.625 | 0.500 |
-| 500/60 | MMR | 0.375 | 0.688 | 0.531 | 0.500 |
-| 500/60 | BM25 | 0.500 | 0.750 | 0.625 | 0.583 |
-| 500/60 | Hybrid | 0.500 | 0.938 | 0.812 | 0.693 |
+| 300/50 | Similarity | 0.673 | 0.913 | 0.856 | 0.768 |
+| 300/50 | MMR | 0.673 | 0.892 | 0.807 | 0.760 |
+| 300/50 | BM25 | 0.604 | 0.822 | 0.754 | 0.691 |
+| **300/50** | **Hybrid** | 0.698 | **0.941** | **0.879** | 0.793 |
+| 500/60 | Similarity | 0.632 | 0.892 | 0.839 | 0.738 |
+| 500/60 | MMR | 0.632 | 0.851 | 0.760 | 0.727 |
+| 500/60 | BM25 | 0.579 | 0.860 | 0.789 | 0.690 |
+| 500/60 | Hybrid | **0.714** | 0.922 | 0.863 | **0.799** |
 
-> 난이도별 표는 [07_eval/](07_eval/)에 있어요. 그룹당 5~6문항이라 0.2 차이 = 1문항 차이예요.
+**근거 유형별 Hybrid (hit@5 / MRR)**
+
+| 유형 | 문항 | 300/50 | 500/60 |
+|:---|---:|:---|:---|
+| paragraph | 235 | **0.915 / 0.771** | 0.877 / 0.751 |
+| table | 120 | 0.983 / 0.801 | **0.992 / 0.830** |
+| image | 60 | 0.967 / 0.861 | 0.967 / **0.906** |
+| formula | 18 | 1.000 / 0.875 | 1.000 / **0.926** |
+
+**결정: 300/50 + Hybrid**
+- 검색 방식은 모든 유형에서 Hybrid가 가장 좋음
+- 청킹은 유형마다 갈림: paragraph는 300/50, table·image·formula는 500/60이 조금 나음 (hit@1·MRR 전체도 500/60이 약간 높음)
+- 그래도 300/50을 고른 이유: 문항이 가장 많은 paragraph에서 차이가 가장 큼(hit@5 9문항 차이), table에서 500/60이 더 맞힌 건 120문항 중 1문항. 정답을 5개 안에 넣는 것(hit@5·recall@5)이 답변 생성에 더 중요
+- 청크 종류별로 섞는 방법(본문 300/50 + 표 500/60)도 검토했지만 얻을 수 있는 게 1~2문항이라 하지 않음. 그림·수식 청크는 두 설정에서 똑같음
+- 남은 약점은 hit@1(약 0.70) → 다음 단계에서 리랭커 또는 상위 5개를 모두 LLM에 넘기는 방식으로 보완
+
+> 처음 기록한 500/60 수치(table_image Similarity hit@5 0.810 등)는 Chroma 색인 문제로 틀렸어요. 색인을 다시 만든 뒤 모든 골든셋을 다시 돌린 값이 위 표예요.
+> 골든셋별·난이도별·근거 유형별 표는 `07_eval/{골든셋 이름}/`에 있어요.
 
 <br>
 
