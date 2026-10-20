@@ -14,7 +14,7 @@
 | 2. 청킹 · 임베딩 | ✅ 완료 | 구조 반영 청킹 300/50, 500/60 → `gemini-embedding-2` → Chroma |
 | 3. 검색 도구 | ⏳ 다음 | 상위 k개 청크 + ID·출처 반환 |
 | 4. Agent 설계 | ⬜ | 판단·행동 흐름, 종료 조건 |
-| 5. 평가 루프 | ⬜ | 지표, 골든셋, 비교 실험 |
+| 5. 평가 루프 | ⏳ 진행 | 검색 평가 완료 (골든셋 16문항, 청킹 2 × 검색 4) → 답변 평가 남음 |
 
 <br>
 
@@ -50,6 +50,9 @@ financial-rag-agent/
 │   ├── 02_embed.py          #   ② 청크 → gemini-embedding-2 → Chroma
 │   ├── 03_search_test.py    #   ③ 두 설정에 같은 질문 던져 비교
 │   └── common.py            #   벡터 DB 위치·임베딩 모델 설정
+├── evaluation/
+│   └── 01_retrieval_eval.py #   골든셋 검색 평가 (Similarity·MMR·BM25·Hybrid)
+├── 07_eval/                 # 평가 결과 (설정별 표 txt + 질문별 jsonl)
 ├── chroma_db/               # 벡터 DB (커밋 안 함, 02_embed.py로 생성 — 한글 경로면 다른 곳, 아래 참고)
 ├── docs/
 │   ├── assignment.md        # 과제 설명
@@ -129,6 +132,34 @@ python indexing/03_search_test.py  # 두 설정 검색 비교 (질문을 인자�
 **청크 메타데이터:** `chunk_id`, `source`, `page`, `doc_group`(`glossary` / `standard_terms` / `life_guide` / `additional`), `block_type`(`text` / `table` / `figure`)
 
 > 기본 negative 세트는 **용어집 + 약관만 검색**하는 조건이라 `doc_group`으로 필터해서 써요.
+
+<br>
+
+## 📊 검색 평가 (골든셋)
+
+```bash
+pip install kiwipiepy rank-bm25 langchain-classic langchain-community
+python evaluation/01_retrieval_eval.py   # 07_eval/retrieval_chunks_*.txt, retrieval_rows.jsonl
+```
+
+- 골든셋 20문항 중 **16문항** 평가 (정답 문서가 없는 거절 문항 4개 제외), 난이도 basic → easy, intermediate → medium, advanced·adversarial → hard
+- 정답: 문서 + 쪽 (약관 `kofia-terms-…-{버전}-{조}`는 버전으로 약관 파일, 조로 쪽을 찾음 / 용어집은 쪽 정보가 없어 파일 단위)
+- 검색 설정은 강의 스크립트와 같음: k=5, fetch_k=20, MMR λ=0.5, Hybrid 0.5:0.5, BM25는 Kiwi 토큰화
+
+**전체 16문항 평균**
+
+| 청킹 | 검색 | hit@1 | hit@5 | recall@5 | MRR |
+|:---|:---|---:|---:|---:|---:|
+| 300/50 | Similarity | 0.438 | 0.938 | 0.781 | 0.656 |
+| 300/50 | MMR | 0.438 | 0.812 | 0.688 | 0.604 |
+| 300/50 | BM25 | 0.500 | 0.688 | 0.531 | 0.578 |
+| **300/50** | **Hybrid** | **0.562** | **0.938** | **0.844** | **0.740** |
+| 500/60 | Similarity | 0.375 | 0.750 | 0.625 | 0.500 |
+| 500/60 | MMR | 0.375 | 0.688 | 0.531 | 0.500 |
+| 500/60 | BM25 | 0.500 | 0.750 | 0.625 | 0.583 |
+| 500/60 | Hybrid | 0.500 | 0.938 | 0.812 | 0.693 |
+
+> 난이도별 표는 [07_eval/](07_eval/)에 있어요. 그룹당 5~6문항이라 0.2 차이 = 1문항 차이예요.
 
 <br>
 
