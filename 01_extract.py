@@ -10,14 +10,23 @@ DATA_DIR = BASE / "01_data"
 OUT_PATH = BASE / "04_extracted" / "pages.jsonl"
 OUT_PATH.parent.mkdir(exist_ok=True)
 GEMINI_PATH = BASE / "04_extracted" / "gemini_tables.json"  # 03_gemini_tables.py 결과
+IMAGE_PATH = BASE / "04_extracted" / "image_regions.json"  # 04_image_regions.py 결과
+FIGURE_NAMES = {"chart": "그래프", "image": "그림", "table": "그림", "diagram": "그림", "formula": "수식"}
+# 그 밖(OCR한 text 등)은 "이미지 속 글자"
 
 # 폰트에 글자 정보가 없는 기호는 (cid:49049)처럼 나온다. 이 자료에서는 전부 화살표라서 →로 바꾼다.
 CID = re.compile(r"\(cid:\d+\)")
 
 
+def fix(text):
+    # 깨진 기호 정리: (cid:…) → 화살표, Wingdings 글머리표(\uf09f 등) → •, Wingdings 공백(\uf020) → 공백
+    text = CID.sub("→", text).replace("\uf020", " ")
+    return re.sub(r"[\uf000-\uf0ff]", "•", text)
+
+
 def clean_cell(cell):
     # 병합된 셀은 None으로 나온다. 셀 안 줄바꿈은 한 줄로 합친다.
-    return " ".join(CID.sub("→", cell or "").split()).replace("|", r"\|")
+    return " ".join(fix(cell or "").split()).replace("|", r"\|")
 
 
 def table_to_markdown(rows):
@@ -232,7 +241,7 @@ def outside(bboxes):
     return keep
 
 
-def extract_page(page, gemini=()):
+def extract_page(page, gemini=(), figures=()):
     # Gemini로 다시 뽑은 표(숫자 검증 통과)를 먼저 넣는다. 이 쪽(펼친 페이지면 이 반쪽)에 글자가 있는 것만.
     # 아래 중복 제거 때문에 같은 자리의 pdfplumber 표는 자동으로 빠진다.
     tables = [
@@ -258,39 +267,49 @@ def extract_page(page, gemini=()):
             tables.append({"bbox": t.bbox, "markdown": markdown, "from": "pdfplumber"})
     tables.sort(key=lambda t: t["bbox"][1])
 
-    # 본문: 표 영역을 뺀 나머지 글자
-    body_page = page.filter(outside([t["bbox"] for t in tables]))
+    # 본문: 표 영역과 그림 영역을 뺀 나머지 글자
+    # (그림 영역 글자 = 벡터로 그린 그래프의 축 숫자 등이라 본문에 흩어지면 노이즈)
+    body_page = page.filter(outside([t["bbox"] for t in tables] + [f["bbox"] for f in figures]))
     body_lines = body_page.extract_text_lines(return_chars=False)
 
-    # 읽는 순서(위→아래)대로 본문 줄과 표를 합친다.
-    blocks = [(line["top"], CID.sub("→", line["text"])) for line in body_lines]
+    # 읽는 순서(위→아래)대로 본문 줄, 표, 그림 해석을 합친다.
+    figure_name = [FIGURE_NAMES.get(f["label"], "이미지 속 글자") for f in figures]
+    blocks = [(line["top"], fix(line["text"])) for line in body_lines]
     blocks += [(t["bbox"][1], "\n" + t["markdown"] + "\n") for t in tables]
+    blocks += [(f["bbox"][1], f"\n[{name}]\n{f['markdown']}\n") for f, name in zip(figures, figure_name)]
     content = "\n".join(text for _, text in sorted(blocks, key=lambda b: b[0])).strip()
 
     return {
-        "text": CID.sub("→", body_page.extract_text() or ""),
+        "text": fix(body_page.extract_text() or ""),
         "tables": [t["markdown"] for t in tables],
         "table_sources": [t["from"] for t in tables],
+        "figures": [{"type": name, "markdown": f["markdown"], "from": f["method"]}
+                    for f, name in zip(figures, figure_name)],
         "content": content,
     }
 
 
-def extract_spread(page, gemini=()):
+def extract_spread(page, gemini=(), figures=()):
     # 두 쪽을 펼쳐서 한 장에 담은 가로로 긴 쪽은 왼쪽 반, 오른쪽 반을 따로 읽고 이어 붙인다.
     # 한 번에 읽으면 위→아래 순서로 정렬되면서 왼쪽 쪽과 오른쪽 쪽 문장이 섞인다.
     if page.width <= page.height:
-        return extract_page(page, gemini)
+        return extract_page(page, gemini, figures)
     # crop으로 자르면 그 안에서 표 영역을 다시 crop할 때 곡선 테두리가 사라져서,
     # 객체 가운데가 어느 쪽에 있는지로 나눈다.
     mid = (page.bbox[0] + page.bbox[2]) / 2
     halves = [
-        extract_page(page.filter(lambda o: ((o["x0"] + o["x1"]) / 2 < mid) == is_left), gemini)
+        extract_page(
+            page.filter(lambda o: ((o["x0"] + o["x1"]) / 2 < mid) == is_left),
+            gemini,
+            [f for f in figures if ((f["bbox"][0] + f["bbox"][2]) / 2 < mid) == is_left],
+        )
         for is_left in (True, False)
     ]
     return {
         "text": "\n".join(h["text"] for h in halves).strip(),
         "tables": [t for h in halves for t in h["tables"]],
         "table_sources": [s for h in halves for s in h["table_sources"]],
+        "figures": [f for h in halves for f in h["figures"]],
         "content": "\n\n".join(h["content"] for h in halves).strip(),
     }
 
@@ -303,15 +322,32 @@ if GEMINI_PATH.exists():
         if g["status"] == "ok":
             gemini_tables[(g["source"], g["page"])].append(g)
 
+def useful_figure(markdown):
+    # 본문에 넣을 가치가 없는 그림 해석은 뺀다.
+    # - "01", "22"처럼 장 번호 배지만 읽은 것 (글자 5개 미만)
+    # - 값이 적혀 있지 않은 그래프의 제목만 남은 것 (예전 프롬프트 결과. 지금은 "설명:" 문장이 붙는다)
+    if len(re.sub(r"\W", "", markdown)) < 5:
+        return False
+    return "설명:" in markdown or not ("값 표기 없음" in markdown and "|" not in markdown)
+
+
+image_regions = defaultdict(list)  # (문서, 쪽) → 숫자 검증을 통과한 그림·그래프 해석
+if IMAGE_PATH.exists():
+    for r in json.loads(IMAGE_PATH.read_text(encoding="utf-8")):
+        if r["status"] == "ok" and useful_figure(r["markdown"]):
+            image_regions[(r["source"], r["page"])].append(r)
+
 with open(OUT_PATH, "w", encoding="utf-8") as f:
     for pdf_path in pdf_paths:
-        n_tables = 0
+        n_tables = n_figures = 0
         with pdfplumber.open(pdf_path) as pdf:
             for i, page in enumerate(pdf.pages, start=1):
                 source = str(pdf_path.relative_to(DATA_DIR)).replace("\\", "/")
-                row = {"source": source, "page": i, **extract_spread(page, gemini_tables[(source, i)])}
+                row = {"source": source, "page": i,
+                       **extract_spread(page, gemini_tables[(source, i)], image_regions[(source, i)])}
                 n_tables += len(row["tables"])
+                n_figures += len(row["figures"])
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        print(f"{pdf_path.name}: {len(pdf.pages)}쪽, 표 {n_tables}개")
+        print(f"{pdf_path.name}: {len(pdf.pages)}쪽, 표 {n_tables}개, 그림 {n_figures}개")
 
 print(f"저장: {OUT_PATH}")

@@ -32,9 +32,13 @@ financial-rag-agent/
 ├── 01_extract.py            # ① PDF → 본문·표 추출
 ├── 02_make_review_md.py     # ② 원문 캡처와 추출 결과 비교 문서 생성
 ├── 03_gemini_tables.py      # ③ 깨진 표만 Gemini로 다시 뽑기 (숫자 검증)
+├── 04_image_regions.py      # ④ 그래프·그림·다이어그램·수식 뽑기 (rapid-layout → Gemini/OCR)
 ├── 04_extracted/            # 추출 결과
 │   ├── pages.jsonl          #   쪽마다 한 줄
 │   ├── gemini_tables.json   #   Gemini로 다시 뽑은 표 + 검증 결과
+│   ├── layout.json          #   rapid-layout 영역 분석 결과 (490쪽)
+│   ├── image_regions.json   #   그림 영역 해석 + 검증 결과
+│   ├── image_check.md       #   숫자 검증을 못 통과한 그림 해석 (사람 검토용)
 │   ├── index.md             #   문서별 요약 + 비교 문서 링크
 │   └── review/              #   문서별 비교 md + 쪽 캡처
 ├── docs/
@@ -67,6 +71,19 @@ python 01_extract.py          # 검증 통과한 표를 pdfplumber 표 대신 �
 python 02_make_review_md.py
 ```
 
+**그래프·그림 뽑기 (선택)**
+
+결과(`layout.json`, `image_regions.json`)가 레포에 있어서 평소엔 `01_extract.py`만 돌리면 돼요. 새로 돌릴 때만:
+
+```bash
+pip install rapid-layout rapidocr onnxruntime
+python 04_image_regions.py    # 레이아웃 분석(약 15분, 한 번만) → 그림 처리(Gemini 6개 동시)
+python 01_extract.py
+python 02_make_review_md.py   # image_check.md(검토 목록)도 같이 생성
+```
+
+> OpenCV는 Windows에서 **한글 경로에 파일을 저장하지 못해요.** 시각화 저장이 안 되면 경로를 확인하세요.
+
 <br>
 
 ## 📄 추출 결과 형식
@@ -91,9 +108,10 @@ python 02_make_review_md.py
 | `text` | 표 영역을 뺀 본문 | 본문만 필요할 때 |
 | `tables` | 그 쪽의 마크다운 표 목록 | 표만 따로 다룰 때 |
 | `table_sources` | 표마다 `pdfplumber` 또는 `gemini` | 평가 때 Gemini 표가 원인인지 구분 |
-| `content` | 본문 + 표 (읽는 순서) | **청킹에는 이걸 사용** |
+| `figures` | 그래프·그림 해석 (`type`, `markdown`, `from`) | 그림에서 온 정보만 따로 다룰 때 |
+| `content` | 본문 + 표 + 그림 해석 (읽는 순서, `[그래프]`·`[그림]`·`[수식]` 표시, 그림마다 `설명:` 문장) | **청킹에는 이걸 사용** |
 
-**현재 수치:** 23개 문서 · 490쪽 · 표 168개(그중 Gemini 3개) · 글자가 거의 없는 쪽(표지·간지) 24쪽
+**현재 수치:** 23개 문서 · 490쪽 · 표 168개(그중 Gemini 3개) · 그래프·그림·수식 130개(그래프 96, 그림·절차도 28, 수식 4, 이미지 속 글자 2) · 글자가 거의 없는 쪽(표지·간지) 24쪽
 
 <br>
 
@@ -116,6 +134,12 @@ pdfplumber의 기본 표 인식(`find_tables`)만으로는 실제 문서의 표�
 | 배경 상자 때문에 같은 표가 두 번 나옴 | 절반 넘게 겹치는 표는 중복으로 제거 |
 | `(cid:49049)` 같은 깨진 기호 | `→`로 치환 |
 | 위 규칙으로도 안 되는 표·수식 | 표 영역 캡처를 Gemini로 다시 뽑고, **숫자가 원문에 있는지 검증**한 것만 사용 |
+| 그래프·그림 속 정보가 빠짐 | rapid-layout으로 영역을 찾아 그래프·그림은 Gemini, 이미지 속 글자는 RapidOCR로 뽑고, Gemini 숫자는 **OCR로 검증** |
+| 장식·장 번호 배지 | Gemini가 "장식"으로 분류하거나 너무 짧은 결과는 제외 |
+| 벡터로 그린 절차도가 뒤섞임 | 작은 글상자 3개 이상이 가로로 이어지면 다이어그램으로 보고 Gemini로 흐름 추출 |
+| 수식 폰트·분수가 깨짐 (`max min× 채무과중도`) | 깨짐 문자·분수 막대·`=`로 끝나는 줄을 찾아 Gemini로 한 줄 수식으로 |
+| 값이 안 적힌 선그래프 | 그림마다 **설명 문장**(추세·흐름)을 받아서 살림 |
+| Wingdings 글머리표가 깨진 문자로 나옴 | `•`로 치환 |
 
 <br>
 
@@ -124,5 +148,6 @@ pdfplumber의 기본 표 인식(`find_tables`)만으로는 실제 문서의 표�
 1. [04_extracted/index.md](04_extracted/index.md)에서 문서를 고른다.
 2. 비교 문서에서 **왼쪽 원문 캡처 ↔ 오른쪽 추출 결과**를 쪽마다 비교한다.
 3. 이상한 곳은 쪽 번호와 함께 팀에 공유한다.
+4. [04_extracted/image_check.md](04_extracted/image_check.md)의 그림 해석 11개를 원본과 비교해서, 맞으면 `image_regions.json`에서 `status`를 `"ok"`로 바꾼다.
 
 > 아직 완벽하지 않은 표 목록은 [docs/chunking_todo.md](docs/chunking_todo.md)의 5번에 정리돼 있어요.

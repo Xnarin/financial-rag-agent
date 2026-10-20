@@ -59,6 +59,8 @@ for source, pages in docs.items():
 index = [
     "# 추출 결과 검토",
     "",
+    "> 그림 해석 중 숫자 검증을 못 통과해 본문에서 뺀 항목은 [image_check.md](image_check.md)에서 확인해요.",
+    "",
     "| 문서 | 쪽수 | 표 | 거의 빈 쪽 | 비교 문서 |",
     "|---|---|---|---|---|",
     *index_rows,
@@ -66,6 +68,38 @@ index = [
 ]
 (EXTRACT_DIR / "index.md").write_text("\n".join(index), encoding="utf-8")
 print(f"{len(docs)}개 문서 → {REVIEW_DIR}")
+
+# 그림 해석 중 숫자 검증을 못 통과한 것(check) 검토 목록
+# 맞으면 image_regions.json에서 그 항목의 status를 "ok"로 바꾸고 01_extract.py를 다시 돌린다.
+IMAGE_REGIONS = EXTRACT_DIR / "image_regions.json"
+if IMAGE_REGIONS.exists():
+    checks = [r for r in json.loads(IMAGE_REGIONS.read_text(encoding="utf-8")) if r["status"] == "check"]
+    (IMAGE_DIR / "checks").mkdir(exist_ok=True)
+    lines = [
+        "# 그림 해석 검토 목록",
+        "",
+        "Gemini가 쓴 숫자 중 OCR로 그림에서 찾지 못한 것이 있어 **본문에 넣지 않은** 항목이에요.",
+        "원본과 비교해서 맞으면 `image_regions.json`에서 그 항목의 `status`를 `\"ok\"`로 바꾸고 `01_extract.py`를 다시 돌려요.",
+        "",
+    ]
+    for n, r in enumerate(checks, start=1):
+        img_name = f"check_{n:02d}.png"
+        with pdfplumber.open(DATA_DIR / r["source"]) as pdf:
+            pdf.pages[r["page"] - 1].crop(r["crop_bbox"]).to_image(resolution=110).save(IMAGE_DIR / "checks" / img_name)
+        lines += [
+            f"## {n}. {r['source']} {r['page']}쪽 ({r['label']})",
+            "",
+            f"- 그림에서 찾지 못한 숫자: `{', '.join(r['unverified_numbers'])}`",
+            f"- bbox: `{r['bbox']}`",
+            "",
+            "<table><tr>",
+            f'<td width="50%" valign="top"><img src="review/images/checks/{img_name}" width="100%"></td>',
+            f'<td width="50%" valign="top"><pre style="white-space: pre-wrap">{html.escape(r["markdown"])}</pre></td>',
+            "</tr></table>",
+            "",
+        ]
+    (EXTRACT_DIR / "image_check.md").write_text("\n".join(lines), encoding="utf-8")
+    print(f"검토 목록: {len(checks)}개 → {EXTRACT_DIR / 'image_check.md'}")
 
 # 브라우저로 바로 보는 뷰어 (왼쪽 문서 목록, 오른쪽 원문 캡처 | 추출 텍스트)
 viewer_data = {
