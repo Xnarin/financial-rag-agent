@@ -29,21 +29,23 @@ financial-rag-agent/
 │   └── additional/          # 주택연금, 퇴직연금, 정책금융 등 6개
 ├── 02_questions/            # 질문 180문항 (강의 제공)
 ├── 03_answers/              # 기준 답안 (강의 제공)
-├── 01_extract.py            # ① PDF → 본문·표 추출
-├── 02_make_review_md.py     # ② 원문 캡처와 추출 결과 비교 문서 생성
-├── 03_gemini_tables.py      # ③ 깨진 표만 Gemini로 다시 뽑기 (숫자 검증)
-├── 04_image_regions.py      # ④ 그래프·그림·다이어그램·수식 뽑기 (rapid-layout → Gemini/OCR)
 ├── 04_extracted/            # 추출 결과
-│   ├── pages.jsonl          #   쪽마다 한 줄
+│   ├── pages.jsonl          #   쪽마다 한 줄 ← 다음 단계(청킹)의 입력
+│   ├── index.md             #   문서별 요약 + 비교 문서 링크
+│   ├── review/              #   문서별 비교 md + 쪽 캡처
+│   ├── image_check.md       #   숫자 검증을 못 통과한 그림 해석 (사람 검토용)
 │   ├── gemini_tables.json   #   Gemini로 다시 뽑은 표 + 검증 결과
 │   ├── layout.json          #   rapid-layout 영역 분석 결과 (490쪽)
-│   ├── image_regions.json   #   그림 영역 해석 + 검증 결과
-│   ├── image_check.md       #   숫자 검증을 못 통과한 그림 해석 (사람 검토용)
-│   ├── index.md             #   문서별 요약 + 비교 문서 링크
-│   └── review/              #   문서별 비교 md + 쪽 캡처
+│   └── image_regions.json   #   그림 영역 해석 + 검증 결과
+├── extraction/              # 추출 스크립트 (번호 = 실행 순서)
+│   ├── 01_extract.py        #   ① PDF → 본문·표·그림 해석 합치기 → pages.jsonl
+│   ├── 02_make_review_md.py #   ② 원문 캡처와 추출 결과 비교 문서
+│   ├── 03_gemini_tables.py  #   ③ 깨진 표만 Gemini로 다시 뽑기 (숫자 검증)
+│   └── 04_image_regions.py  #   ④ 그래프·그림·다이어그램·수식 (rapid-layout → Gemini/OCR)
 ├── docs/
 │   ├── assignment.md        # 과제 설명
-│   └── chunking_todo.md     # 청킹 단계에서 해결할 것
+│   ├── chunking_todo.md     # 청킹 단계에서 해결할 것
+│   └── 비용추정.md          # 추출 단계 Gemini 비용 (약 $1.8)
 └── 회고.md                  # 추출 단계에서 만난 문제와 해결 과정
 ```
 
@@ -53,8 +55,8 @@ financial-rag-agent/
 
 ```bash
 pip install pdfplumber python-dotenv langchain-google-genai
-python 01_extract.py          # 04_extracted/pages.jsonl 생성 (약 1~2분)
-python 02_make_review_md.py   # 04_extracted/index.md, review/*.md 생성
+python extraction/01_extract.py          # 04_extracted/pages.jsonl 생성 (약 2분)
+python extraction/02_make_review_md.py   # 04_extracted/index.md, review/*.md 생성
 ```
 
 > `01_extract.py`를 고쳤다면 `02_make_review_md.py`도 다시 돌려야 비교 문서에 반영돼요.
@@ -66,9 +68,9 @@ pdfplumber로 안 되는 표는 `03_gemini_tables.py`의 `TARGETS`에 문서·�
 
 ```bash
 # .env 에 GEMINI_API_KEY=... 필요 (.env는 커밋하지 않음)
-python 03_gemini_tables.py    # 표 영역 캡처 → Gemini → 숫자 검증
-python 01_extract.py          # 검증 통과한 표를 pdfplumber 표 대신 사용
-python 02_make_review_md.py
+python extraction/03_gemini_tables.py    # 표 영역 캡처 → Gemini → 숫자 검증
+python extraction/01_extract.py          # 검증 통과한 표를 pdfplumber 표 대신 사용
+python extraction/02_make_review_md.py
 ```
 
 **그래프·그림 뽑기 (선택)**
@@ -77,9 +79,9 @@ python 02_make_review_md.py
 
 ```bash
 pip install rapid-layout rapidocr onnxruntime
-python 04_image_regions.py    # 레이아웃 분석(약 15분, 한 번만) → 그림 처리(Gemini 6개 동시)
-python 01_extract.py
-python 02_make_review_md.py   # image_check.md(검토 목록)도 같이 생성
+python extraction/04_image_regions.py    # 레이아웃 분석(약 15분, 한 번만) → 그림 처리(Gemini 6개 동시)
+python extraction/01_extract.py
+python extraction/02_make_review_md.py   # image_check.md(검토 목록)도 같이 생성
 ```
 
 > OpenCV는 Windows에서 **한글 경로에 파일을 저장하지 못해요.** 시각화 저장이 안 되면 경로를 확인하세요.

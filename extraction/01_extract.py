@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pdfplumber
 
-BASE = Path(__file__).parent
+BASE = Path(__file__).parent.parent  # 프로젝트 루트 (스크립트는 extraction/ 안에 있음)
 DATA_DIR = BASE / "01_data"
 OUT_PATH = BASE / "04_extracted" / "pages.jsonl"
 OUT_PATH.parent.mkdir(exist_ok=True)
