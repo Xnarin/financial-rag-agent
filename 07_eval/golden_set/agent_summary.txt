@@ -1,0 +1,57 @@
+##### golden_set / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / Agent / gemini-3.6-flash (agent-golden_set-20261021-115259)
+
+=== 전체 ===
+         count: 20
+   correctness: 0.975
+  faithfulness: 0.988
+  must_include: 0.983
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 1
+context_chunks: 17.7
+     llm_calls: 3.1
+      searches: 1.35
+  input_tokens: 8254.65
+ output_tokens: 2303.6
+      total_ms: 15470.72
+            성공: 20
+         검색 실패: 0
+         답변 실패: 0
+
+=== positive ===
+         count: 14
+   correctness: 0.964
+  faithfulness: 0.982
+  must_include: 0.976
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 1
+context_chunks: 18.071
+     llm_calls: 3.214
+      searches: 1.286
+  input_tokens: 9014
+ output_tokens: 2476.071
+      total_ms: 16539.924
+            성공: 14
+         검색 실패: 0
+         답변 실패: 0
+
+=== negative ===
+         count: 6
+   correctness: 1.0
+  faithfulness: 1.0
+  must_include: 1
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 1
+context_chunks: 16.833
+     llm_calls: 2.833
+      searches: 1.5
+  input_tokens: 6482.833
+ output_tokens: 1901.167
+      total_ms: 12975.909
+            성공: 6
+         검색 실패: 0
+         답변 실패: 0
+
+=== 실패 문항 ===

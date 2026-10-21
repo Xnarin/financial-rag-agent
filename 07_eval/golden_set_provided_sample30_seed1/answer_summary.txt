@@ -1,0 +1,60 @@
+##### golden_set_provided_sample30_seed1 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / 기본 RAG / gemini-3.6-flash (rag-golden_set_provided_sample30_seed1-20261021-115046)
+
+=== 전체 ===
+         count: 30
+   correctness: 0.883
+  faithfulness: 0.967
+  must_include: 0.917
+      must_not: 0.033
+   behavior_ok: 0.967
+   citation_ok: 0.917
+context_chunks: 13.033
+     llm_calls: 1
+      searches: 1
+  input_tokens: 2857.567
+ output_tokens: 2118.767
+      total_ms: 11416.999
+            성공: 27
+         검색 실패: 0
+         답변 실패: 3
+
+=== positive ===
+         count: 24
+   correctness: 0.875
+  faithfulness: 0.975
+  must_include: 0.896
+      must_not: 0.042
+   behavior_ok: 1
+   citation_ok: 0.917
+context_chunks: 12.833
+     llm_calls: 1
+      searches: 1
+  input_tokens: 2867.667
+ output_tokens: 2141.875
+      total_ms: 11590.117
+            성공: 22
+         검색 실패: 0
+         답변 실패: 2
+
+=== negative ===
+         count: 6
+   correctness: 0.917
+  faithfulness: 0.938
+  must_include: 1
+      must_not: 0
+   behavior_ok: 0.833
+   citation_ok: None
+context_chunks: 13.833
+     llm_calls: 1
+      searches: 1
+  input_tokens: 2817.167
+ output_tokens: 2026.333
+      total_ms: 10724.527
+            성공: 5
+         검색 실패: 0
+         답변 실패: 1
+
+=== 실패 문항 ===
+POS006 [답변 실패] 제시된 문서에 집합투자규약의 정의(조직, 운영 방식, 권리, 의무)가 명시되어 있지 않아 출처에 기반하여 제한적으로 답변하였으나, 기준 답안에 포함되어야 할 핵심 키워드(조직, 운영, 권리, 의무)가 모두 누락되었습니다.
+NEG010 [답변 실패] 답변에서 상품 종류별 청약철회 기간과 계약서류 수령일 관련 내용을 서술하였으나, 사용자에게 어떤 상품인지와 수령일이 언제인지 되묻는 Clarifying Question을 수행하지 않았습니다.
+POS048 [답변 실패] 질문에서 요구한 청약철회, 위법계약 해지, 담보 처분에 대한 핵심 내용을 정확히 설명하고 필 수 포함 항목을 모두 포함하였습니다. 그러나 답변 마지막 부분에서 출처에 없는 분산 투자 권유(개인화 투자 권유 오류)를 포함하였습니다.

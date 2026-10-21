@@ -1,16 +1,19 @@
-##### golden_set / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / gemini-3.6-flash (answer-golden_set-20261021-101754)
+##### golden_set / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / 기본 RAG / gemini-3.6-flash (rag-golden_set-20261021-111016)
 
 === 전체 ===
          count: 20
-   correctness: 0.95
-  faithfulness: 0.993
-  must_include: 0.958
+   correctness: 0.975
+  faithfulness: 0.984
+  must_include: 0.983
       must_not: 0
    behavior_ok: 1
    citation_ok: 1
 context_chunks: 15
-  retrieval_ms: 20.662
-     answer_ms: 11890.882
+     llm_calls: 1
+      searches: 1
+  input_tokens: 3172.45
+ output_tokens: 2123.05
+      total_ms: 11268.7
             성공: 20
          검색 실패: 0
          답변 실패: 0
@@ -18,29 +21,35 @@ context_chunks: 15
 === positive ===
          count: 14
    correctness: 0.964
-  faithfulness: 1.0
+  faithfulness: 0.986
   must_include: 0.976
       must_not: 0
    behavior_ok: 1
    citation_ok: 1
 context_chunks: 15.571
-  retrieval_ms: 24.399
-     answer_ms: 12531.386
+     llm_calls: 1
+      searches: 1
+  input_tokens: 3301
+ output_tokens: 2135.571
+      total_ms: 11395.332
             성공: 14
          검색 실패: 0
          답변 실패: 0
 
 === negative ===
          count: 6
-   correctness: 0.917
-  faithfulness: 0.976
-  must_include: 0.917
+   correctness: 1.0
+  faithfulness: 0.979
+  must_include: 1
       must_not: 0
    behavior_ok: 1
    citation_ok: 1
 context_chunks: 13.667
-  retrieval_ms: 11.941
-     answer_ms: 10396.372
+     llm_calls: 1
+      searches: 1
+  input_tokens: 2872.5
+ output_tokens: 2093.833
+      total_ms: 10973.225
             성공: 6
          검색 실패: 0
          답변 실패: 0

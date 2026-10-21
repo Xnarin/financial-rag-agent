@@ -1,0 +1,58 @@
+##### golden_set_provided_sample30_seed1 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / Agent / gemini-3.6-flash (agent-golden_set_provided_sample30_seed1-20261021-115810)
+
+=== 전체 ===
+         count: 30
+   correctness: 0.883
+  faithfulness: 0.979
+  must_include: 0.906
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 0.833
+context_chunks: 14.4
+     llm_calls: 3.067
+      searches: 1.2
+  input_tokens: 6496.6
+ output_tokens: 2287.267
+      total_ms: 15262.973
+            성공: 29
+         검색 실패: 0
+         답변 실패: 1
+
+=== positive ===
+         count: 24
+   correctness: 0.854
+  faithfulness: 0.979
+  must_include: 0.882
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 0.833
+context_chunks: 14.542
+     llm_calls: 3.25
+      searches: 1.25
+  input_tokens: 7135.917
+ output_tokens: 2377.833
+      total_ms: 16001.87
+            성공: 23
+         검색 실패: 0
+         답변 실패: 1
+
+=== negative ===
+         count: 6
+   correctness: 1.0
+  faithfulness: 0.976
+  must_include: 1
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: None
+context_chunks: 13.833
+     llm_calls: 2.333
+      searches: 1
+  input_tokens: 3939.333
+ output_tokens: 1925
+      total_ms: 12307.386
+            성공: 6
+         검색 실패: 0
+         답변 실패: 0
+
+=== 실패 문항 ===
+POS006 [답변 실패] 제공된 문서의 부족으로 인해 집합투자규약의 핵심 정의인 펀드의 조직, 운영 방식, 투자자의 권리와 의무에 대한 설명이 누락되어 기준 답안의 필수 내용을 담지 못했습니다.

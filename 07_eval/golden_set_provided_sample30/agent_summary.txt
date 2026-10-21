@@ -1,0 +1,58 @@
+##### golden_set_provided_sample30 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / Agent / gemini-3.6-flash (agent-golden_set_provided_sample30-20261021-114355)
+
+=== 전체 ===
+         count: 30
+   correctness: 0.95
+  faithfulness: 0.97
+  must_include: 0.977
+      must_not: 0.033
+   behavior_ok: 1
+   citation_ok: 0.958
+context_chunks: 15.267
+     llm_calls: 3.2
+      searches: 1.333
+  input_tokens: 7228.333
+ output_tokens: 2235.733
+      total_ms: 15213.981
+            성공: 29
+         검색 실패: 0
+         답변 실패: 1
+
+=== positive ===
+         count: 24
+   correctness: 0.938
+  faithfulness: 0.962
+  must_include: 0.971
+      must_not: 0.042
+   behavior_ok: 1
+   citation_ok: 0.958
+context_chunks: 15.458
+     llm_calls: 3.333
+      searches: 1.333
+  input_tokens: 7660.125
+ output_tokens: 2255
+      total_ms: 15565.252
+            성공: 23
+         검색 실패: 0
+         답변 실패: 1
+
+=== negative ===
+         count: 6
+   correctness: 1.0
+  faithfulness: 1.0
+  must_include: 1
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: None
+context_chunks: 14.5
+     llm_calls: 2.667
+      searches: 1.333
+  input_tokens: 5501.167
+ output_tokens: 2158.667
+      total_ms: 13808.897
+            성공: 6
+         검색 실패: 0
+         답변 실패: 0
+
+=== 실패 문항 ===
+POS057 [답변 실패] 약관 산식과 계산 가능한 범위에 대한 설명은 출처 표기와 함께 정확히 작성되었으나, '별첨'에 대한 내용이 누락되었고 요청되지 않은 분산투자 권유 문장(개인화 투자 권유)이 포함되었습니다.
