@@ -3,7 +3,7 @@
 비교 실험: 300/50 vs 500/60 (글자 수 기준). 두 설정 모두 같은 전처리를 쓰고 크기만 다르다.
 
 - 머리글·꼬리말(쪽 번호, 반복 제목, 경고문 등)은 지운다.
-- 표: 바로 위 제목·단위 줄 + 바로 아래 각주(주·자료·*·※)와 묶는다.
+- 표: 바로 위 제목·단위 줄(캡션 패턴 또는 문장이 아닌 짧은 줄, 최대 4줄) + 바로 아래 각주(주·자료·*·※)와 묶는다.
        청크 크기를 넘으면 행 단위로 나누고, 조각마다 제목과 헤더를 반복한다.
 - 그림·그래프·수식 해석: 쪼개지 않고 통째로 한 청크 (설명 문장 포함).
 - 본문: RecursiveCharacterTextSplitter로 쪽 단위로 나눈다 (출처 쪽 번호를 정확히 남기려고).
@@ -74,6 +74,12 @@ def split_blocks(page):
     return blocks
 
 
+def is_title(line):
+    line = line.strip()
+    # 앞 표의 각주(자료: …)는 제외
+    return 0 < len(line) < 40 and not line.endswith(("다.", "다", "요.", "요", ".", "?", ":")) and not NOTE.search(line)
+
+
 def attach_context(blocks):
     # 표·그림 바로 위의 제목·단위 줄과 바로 아래 각주 줄을 그 블록으로 옮긴다.
     out = []
@@ -83,7 +89,9 @@ def attach_context(blocks):
             continue
         before = out[-1][1] if out and out[-1][0] == "text" else []
         head = []
-        while before and (not before[-1].strip() or (CAPTION.search(before[-1]) and len(before[-1]) < 80)) and len(head) < 3:
+        # 제목 줄: 캡션 패턴이거나, 문장이 아닌 짧은 줄 ("현금흐름표(예시)", "20◯◯년 1월 1일 ~ 12월 31일", "유입 유출")
+        while before and (not before[-1].strip() or (CAPTION.search(before[-1]) and len(before[-1]) < 80)
+                          or is_title(before[-1])) and len(head) < 4:
             line = before.pop()
             if line.strip():
                 head.insert(0, line.strip())
