@@ -31,6 +31,8 @@ MAX_RETRIES = 2
 DOC_DATE = "2026-09-03"
 # 분류는 단순한 고르기라 생각 거의 없이(minimal), 근거 판단은 조금 생각하게(low). 답변은 기본값
 CLASSIFY_EFFORT, GRADE_EFFORT = "minimal", "low"
+# 답변 작성도 low: 출력(대부분 생각) 토큰 −58%, 시간 −38%, 정답률 그대로 (실험 E10). "default"면 모델 기본값
+ANSWER_EFFORT = "low"
 
 DOCS = ("금융용어집, 증권 표준약관 15종(매매·파생상품·신용거래·연금저축·전자금융·해외투자 등), 금융생활 가이드북, "
         "주택연금 백문백답, 퇴직연금 보고서, 주택 정책금융 보고서, 자영업자 부채 보고서, 보험약관 예시, 정책서민금융·채무조정 보고서")
@@ -128,12 +130,14 @@ def usage(state, raw, model):
             "input_tokens": state.get("input_tokens", 0) + i, "output_tokens": state.get("output_tokens", 0) + o}
 
 
-def build_agent(tool=None, prompt="ABC", small_model=None):
+def build_agent(tool=None, prompt="ABC", small_model=None, answer_effort=None):
     # small_model: 분류·근거 판단에 쓸 모델 (기본은 답변과 같은 LLM_MODEL). 답변 작성은 항상 LLM_MODEL
     small = small_model or LLM_MODEL
     tool = tool or SearchTool()
     key = os.environ["GEMINI_API_KEY"]
-    llm = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=key, timeout=120, max_retries=2)
+    effort = answer_effort or ANSWER_EFFORT
+    llm = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=key, timeout=120, max_retries=2,
+                                 **({"reasoning_effort": effort} if effort != "default" else {}))
     classifier = ChatGoogleGenerativeAI(model=small, api_key=key, timeout=60, max_retries=2,
                                         reasoning_effort=CLASSIFY_EFFORT).with_structured_output(Classification, include_raw=True)
     grader = ChatGoogleGenerativeAI(model=small, api_key=key, timeout=60, max_retries=2,
@@ -198,7 +202,7 @@ if __name__ == "__main__":
     if "mermaid" in opts:
         print(build_agent(tool=object()).get_graph().draw_mermaid())
         sys.exit()
-    agent = build_agent(small_model=opts.get("small") or None)
+    agent = build_agent(small_model=opts.get("small") or None, answer_effort=opts.get("answer-effort") or None)
     result = agent.invoke({"question": " ".join(args) or "주택연금은 무상 지원금인가요?",
                            "groups": opts["groups"].split(",") if opts.get("groups") else None})
     print(f"경로: {' → '.join(result['trace'])} (분류 {result['route']}, 검색어 {result.get('queries')})")

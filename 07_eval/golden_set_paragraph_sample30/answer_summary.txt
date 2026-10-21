@@ -1,0 +1,21 @@
+##### golden_set_paragraph_sample30 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / 기본 RAG / gemini-3.6-flash (rag-golden_set_paragraph_sample30-20261021-141316)
+
+=== 전체 ===
+         count: 30
+   correctness: 0.783
+  faithfulness: 0.989
+  must_include: 0.847
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 0.967
+context_chunks: 13.267
+     llm_calls: 1
+      searches: 1
+  input_tokens: 2962.567
+ output_tokens: 807.633
+      total_ms: 5424.119
+            성공: 30
+         검색 실패: 0
+         답변 실패: 0
+
+=== 실패 문항 ===

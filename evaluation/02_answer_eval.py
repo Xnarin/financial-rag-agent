@@ -3,6 +3,7 @@
 python evaluation/02_answer_eval.py                              # 05_golden_set/golden_set.jsonl (20문항)
 python evaluation/02_answer_eval.py 05_golden_set/xxx.jsonl
 python evaluation/02_answer_eval.py --neighbors=0                # 이웃 청크 없이 상위 5개만 (비교용)
+python evaluation/02_answer_eval.py --answer-effort=default        # 답변의 생각 수준 (기본 low, E10 이전 방식은 default)
 python evaluation/02_answer_eval.py --mode=agent --small=gemini-3.5-flash-lite  # Agent의 분류·근거 판단만 가벼운 모델로 (E9)
 python evaluation/02_answer_eval.py --mode=agent                 # 기본 RAG 대신 Agent(agent/graph.py)로 답변 → agent_rows.jsonl
 python evaluation/02_answer_eval.py --prompt=base                # 프롬프트 규칙 묶음 (base / A / AB / ABC, 기본 ABC, agent/prompts.py)
@@ -42,7 +43,7 @@ from pydantic import BaseModel, Field
 
 ret = importlib.import_module("01_retrieval_eval")  # 검색 평가의 정답 만들기·점수를 그대로 씀
 from common import EMBEDDING_MODEL_NAME, get_embeddings, log_cost  # noqa: E402
-from graph import CLASSIFY_EFFORT, GRADE_EFFORT, MAX_RETRIES, build_agent  # noqa: E402
+from graph import ANSWER_EFFORT, CLASSIFY_EFFORT, GRADE_EFFORT, MAX_RETRIES, build_agent  # noqa: E402
 from prompts import ANSWER_PROMPT, extra_rules  # noqa: E402
 from search import BASIC_GROUPS, CONFIG, FETCH_K, K, WEIGHTS, SearchTool, label, to_context  # noqa: E402
 
@@ -92,7 +93,7 @@ def tokens(raw):
     return u["input_tokens"], u["total_tokens"] - u["input_tokens"]
 
 
-def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small):
+def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small, answer_effort):
     golden = [json.loads(line) for line in golden_path.open(encoding="utf-8") if line.strip()]
     name = golden_path.stem
     if sample:
@@ -113,7 +114,7 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
     for g in golden:
         embeddings.embed_query(g["question"])
     tool = SearchTool(embeddings)
-    agent = build_agent(tool, prompt, small) if mode == "agent" else None
+    agent = build_agent(tool, prompt, small, answer_effort) if mode == "agent" else None
     by_model = {}  # Agent 모델별 [호출, 입력, 출력] (비용 계산용)
 
     # 1) 검색 + 답변 (문항마다 시간을 재려고 하나씩)
@@ -237,8 +238,9 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
                        "neighbors": neighbors, "prompt": prompt,
                        "hybrid_weights": WEIGHTS, "embedding": EMBEDDING_MODEL_NAME,
                        "llm": LLM_MODEL, "judge": LLM_MODEL,
+                       **({"answer_effort": answer_effort or ANSWER_EFFORT} if not agent else {}),
                        **({"max_retries": MAX_RETRIES, "classify_effort": CLASSIFY_EFFORT, "grade_effort": GRADE_EFFORT,
-                           "small_model": small or LLM_MODEL}
+                           "small_model": small or LLM_MODEL, "answer_effort": answer_effort or ANSWER_EFFORT}
                           if agent else {})},
             "results": results,
             "tokens": usage, "cost_usd": round(cost, 4),
@@ -250,14 +252,22 @@ def main():
     prompt = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--prompt=")), "ABC")
     mode = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--mode=")), "rag")
     small = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--small=")), None)
+    answer_effort = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--answer-effort=")), None)
     sample = next((int(a.split("=")[1]) for a in sys.argv[1:] if a.startswith("--sample=")), 0)
     seed = next((int(a.split("=")[1]) for a in sys.argv[1:] if a.startswith("--seed=")), 0)
     paths = [Path(p) for p in sys.argv[1:] if not p.startswith("--")] or [ret.GOLDEN_DIR / "golden_set.jsonl"]
     embeddings = ret.QueryCache(get_embeddings())
-    llm = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=os.environ["GEMINI_API_KEY"], timeout=120, max_retries=2)
-    judge_llm = llm.with_structured_output(Judge, include_raw=True)
+    key = os.environ["GEMINI_API_KEY"]
+    # 답변 LLM의 생각 수준은 --answer-effort (E10-b). 채점 LLM은 항상 모델 기본값 (자를 바꾸지 않기)
+    # 기본은 Agent와 같은 ANSWER_EFFORT(low), "default"면 모델 기본값
+    rag_effort = (answer_effort or ANSWER_EFFORT) if mode == "rag" else None
+    rag_effort = None if rag_effort == "default" else rag_effort
+    llm = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=key, timeout=120, max_retries=2,
+                                 **({"reasoning_effort": rag_effort} if rag_effort else {}))
+    judge_llm = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=key, timeout=120,
+                                       max_retries=2).with_structured_output(Judge, include_raw=True)
     for path in paths:
-        evaluate(path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small)
+        evaluate(path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small, answer_effort)
 
 
 if __name__ == "__main__":

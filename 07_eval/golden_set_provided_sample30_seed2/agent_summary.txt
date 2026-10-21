@@ -1,0 +1,59 @@
+##### golden_set_provided_sample30_seed2 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / Agent / gemini-3.6-flash (agent-golden_set_provided_sample30_seed2-20261021-141013)
+
+=== 전체 ===
+         count: 30
+   correctness: 0.917
+  faithfulness: 0.987
+  must_include: 0.944
+      must_not: 0.067
+   behavior_ok: 1
+   citation_ok: 0.889
+context_chunks: 17.833
+     llm_calls: 3.467
+      searches: 1.533
+  input_tokens: 9624.567
+ output_tokens: 968.2
+      total_ms: 9979.934
+            성공: 28
+         검색 실패: 0
+         답변 실패: 2
+
+=== positive ===
+         count: 24
+   correctness: 0.938
+  faithfulness: 0.992
+  must_include: 0.972
+      must_not: 0.083
+   behavior_ok: 1
+   citation_ok: 0.917
+context_chunks: 17.5
+     llm_calls: 3.458
+      searches: 1.5
+  input_tokens: 9578.167
+ output_tokens: 1016.833
+      total_ms: 10124.478
+            성공: 22
+         검색 실패: 0
+         답변 실패: 2
+
+=== negative ===
+         count: 6
+   correctness: 0.833
+  faithfulness: 0.967
+  must_include: 0.833
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 0.667
+context_chunks: 19.167
+     llm_calls: 3.5
+      searches: 1.667
+  input_tokens: 9810.167
+ output_tokens: 773.667
+      total_ms: 9401.754
+            성공: 6
+         검색 실패: 0
+         답변 실패: 0
+
+=== 실패 문항 ===
+ADD-RP08 [답변 실패] 답변은 질문의 핵심 요소(단순 평균 부적절성, 85.4%의 의미, 과거 실적과 미래 보장 구분)를 모두 정확히 설명했으나, 피해야 할 오류 중 하나인 연말 적립금 비중의 가중평균으로 전체 수익률이 정확히 산출된 것이라고 단정하여 설명했습니다.
+ADD-PF03 [답변 실패] 답변 결론에서 연소득 4천만원 조건이 햇살론 특례보증 조건도 충족한다고 잘못 설명하여 핵심 오류가 발생했습니다. 본문 주석에서는 3,500만원 이하 조건으로 인해 미충족함을 기술하여 내용 간 모순도 존재합니다.

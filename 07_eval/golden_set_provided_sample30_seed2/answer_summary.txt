@@ -1,0 +1,62 @@
+##### golden_set_provided_sample30_seed2 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / 기본 RAG / gemini-3.6-flash (rag-golden_set_provided_sample30_seed2-20261021-140819)
+
+=== 전체 ===
+         count: 30
+   correctness: 0.85
+  faithfulness: 0.979
+  must_include: 0.883
+      must_not: 0.067
+   behavior_ok: 0.967
+   citation_ok: 0.815
+context_chunks: 13.867
+     llm_calls: 1
+      searches: 1
+  input_tokens: 3142.567
+ output_tokens: 883.6
+      total_ms: 5901.021
+            성공: 25
+         검색 실패: 2
+         답변 실패: 3
+
+=== positive ===
+         count: 24
+   correctness: 0.833
+  faithfulness: 0.985
+  must_include: 0.854
+      must_not: 0.083
+   behavior_ok: 1
+   citation_ok: 0.833
+context_chunks: 13.875
+     llm_calls: 1
+      searches: 1
+  input_tokens: 3165.958
+ output_tokens: 944.083
+      total_ms: 6086.237
+            성공: 20
+         검색 실패: 2
+         답변 실패: 2
+
+=== negative ===
+         count: 6
+   correctness: 0.917
+  faithfulness: 0.958
+  must_include: 1
+      must_not: 0
+   behavior_ok: 0.833
+   citation_ok: 0.667
+context_chunks: 13.833
+     llm_calls: 1
+      searches: 1
+  input_tokens: 3049
+ output_tokens: 641.667
+      total_ms: 5160.158
+            성공: 5
+         검색 실패: 0
+         답변 실패: 1
+
+=== 실패 문항 ===
+ADD-SE05 [검색 실패] 검색 근거에서 고위험가구 기준을 찾을 수 없다고 답변하여, DTA와 DSR 두 기준을 동시 초과하는 C만 고위험가구라는 핵심 내용을 전혀 작성하지 못했습니다.
+ADD-PF03 [답변 실패] 햇살론 특례보증의 자격 요건은 연소득 3,500만원 이하이므로 연소득 4천만원 차주는 특례보증 대상을 충족하지 못함에도, 답변에서는 두 보증 모두 자격 조건을 충족한다고 잘못 안내하였습니다.
+POS060 [답변 실패] 질문에서 요구한 일반 결제불이행과 신용거래 기한이익 상실의 구분 및 선행조건을 약관 출처 표기와 함께 정확히 설명하였으나, 출처 근거에 존재하지 않는 날짜 숫자(2026-09-03)가 포함되었습니다.
+NEG011 [답변 실패] 질문이 모호하므로 상품, 회사, 거래 종류를 확인하는 되물음(ask_clarifying_question)을 해야 하지만 되묻지 않고 약관 전체의 수수료 정보를 나열하듯이 답변하였습니다.
+POS035 [검색 실패] 검색 근거에서 답변을 찾을 수 없다고 판단하여 질문에 대한 직접적인 답을 제공하지 못하였고, 필수 포함 요소(필요한 수량, 미결제약정, 지체 없이, 통지)가 모두 누락되었습니다.

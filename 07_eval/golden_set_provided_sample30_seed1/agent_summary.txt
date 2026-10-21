@@ -1,45 +1,45 @@
-##### golden_set_provided_sample30_seed1 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / Agent / gemini-3.6-flash (agent-golden_set_provided_sample30_seed1-20261021-125059)
+##### golden_set_provided_sample30_seed1 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / Agent / gemini-3.6-flash (agent-golden_set_provided_sample30_seed1-20261021-140359)
 
 === 전체 ===
          count: 30
    correctness: 0.917
-  faithfulness: 0.983
-  must_include: 0.928
+  faithfulness: 0.966
+  must_include: 0.911
       must_not: 0.033
    behavior_ok: 1
-   citation_ok: 0.875
-context_chunks: 14.467
+   citation_ok: 0.917
+context_chunks: 14.533
      llm_calls: 3.1
       searches: 1.233
-  input_tokens: 6656.9
- output_tokens: 2386.4
-      total_ms: 15884.825
-            성공: 29
+  input_tokens: 6691.033
+ output_tokens: 880.7
+      total_ms: 9229.276
+            성공: 28
          검색 실패: 0
-         답변 실패: 1
+         답변 실패: 2
 
 === positive ===
          count: 24
    correctness: 0.896
-  faithfulness: 0.978
-  must_include: 0.91
+  faithfulness: 0.983
+  must_include: 0.889
       must_not: 0.042
    behavior_ok: 1
-   citation_ok: 0.875
-context_chunks: 14.625
+   citation_ok: 0.917
+context_chunks: 14.708
      llm_calls: 3.292
       searches: 1.292
-  input_tokens: 7336.292
- output_tokens: 2481.167
-      total_ms: 16650.736
-            성공: 23
+  input_tokens: 7378.958
+ output_tokens: 895.208
+      total_ms: 9754.708
+            성공: 22
          검색 실패: 0
-         답변 실패: 1
+         답변 실패: 2
 
 === negative ===
          count: 6
    correctness: 1.0
-  faithfulness: 1.0
+  faithfulness: 0.897
   must_include: 1
       must_not: 0
    behavior_ok: 1
@@ -48,11 +48,12 @@ context_chunks: 13.833
      llm_calls: 2.333
       searches: 1
   input_tokens: 3939.333
- output_tokens: 2007.333
-      total_ms: 12821.178
+ output_tokens: 822.667
+      total_ms: 7127.546
             성공: 6
          검색 실패: 0
          답변 실패: 0
 
 === 실패 문항 ===
-POS053 [답변 실패] 질문에 대한 핵심 답변은 작성하였으나 필수 키워드인 '설명의무'와 '별첨'이 빠져 있으며, '분산 투자를 고려해야 합니다'와 같은 개인화 투자 권유 조언을 포함하고 있어 채점 기준을 완전하게 만족하지 못했습니다.
+POS006 [답변 실패] 제공된 문서에 집합투자규약의 정의와 내용이 포함되어 있지 않아 답변이 이를 문서에서 찾을 수 없다고 안내하였으나, 기준 답안에 해당하는 핵심 내용(조직, 운영, 권리, 의무)이 전혀 포함되지 않아 정확도 점수는 0점입니다.
+POS058 [답변 실패] 해외 펀드와 해외 주식의 적용 약관 차이 및 시차, 결제기간, 환전 절차 등으로 인해 당일 원화 수령이 불가능함을 정확히 설명하였습니다. 다만 출처 문서에 명시되지 않은 숫자 표기(T+1, T+2)가 언급되었습니다.
