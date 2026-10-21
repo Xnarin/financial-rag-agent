@@ -157,12 +157,12 @@ pip install pdfplumber python-dotenv langchain-google-genai langchain-text-split
 
 | 할 일 | 명령 |
 |:---|:---|
-| 1. 벡터 DB 만들기 (처음 한 번) | `python indexing/01_chunk.py` → `python indexing/02_embed.py` |
+| 1. 벡터 DB 만들기 (처음 한 번) | `python indexing/chunk.py` → `python indexing/embed.py` |
 | 2. Agent에게 묻기 | `python agent/graph.py "주택연금은 무상 지원금인가요?"` |
 | 검색만 해 보기 (LLM 없음) | `python agent/search.py "임의매매 금지"` |
-| 검색 평가 | `python evaluation/01_retrieval_eval.py` |
-| 답변 평가 (기본 RAG / Agent) | `python evaluation/02_answer_eval.py` / `... --mode=agent` |
-| 처음 보는 30문항으로 확인 | `python evaluation/02_answer_eval.py 05_golden_set/golden_set_provided.jsonl --sample=30 --seed=1` |
+| 검색 평가 | `python evaluation/retrieval_eval.py` |
+| 답변 평가 (기본 RAG / Agent) | `python evaluation/answer_eval.py` / `... --mode=agent` |
+| 처음 보는 30문항으로 확인 | `python evaluation/answer_eval.py 05_golden_set/golden_set_provided.jsonl --sample=30 --seed=1` |
 | Agent 구조도 출력 | `python agent/graph.py --mermaid` |
 
 > **주의:** Windows에서 경로에 한글이 있으면 Chroma가 색인 파일을 못 써서, 자동으로 `C:/Users/Public/financial-rag-agent/chroma_db`에 저장해요. 바꾸려면 `.env`에 `CHROMA_DIR=영문경로`.

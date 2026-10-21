@@ -1,7 +1,7 @@
 """pdfplumber로 제대로 안 뽑히는 표를 Gemini로 다시 뽑는다.
 
 표 영역 캡처 → Gemini → 숫자 검증 → 04_extracted/gemini_tables.json
-검증을 통과한 표는 01_extract.py가 읽어서 pdfplumber 표 대신 쓴다.
+검증을 통과한 표는 extract.py가 읽어서 pdfplumber 표 대신 쓴다.
 """
 import base64
 import json

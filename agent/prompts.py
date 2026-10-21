@@ -1,4 +1,4 @@
-"""답변 프롬프트: 기본 RAG(evaluation/02_answer_eval.py)와 Agent(agent/graph.py)가 같이 쓴다.
+"""답변 프롬프트: 기본 RAG(evaluation/answer_eval.py)와 Agent(agent/graph.py)가 같이 쓴다.
 
 ANSWER_PROMPT의 {extra} 자리에 EXTRA_RULES 묶음을 넣는다. 기본은 ABC (README "프롬프트 개선" 참고).
 """

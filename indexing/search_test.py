@@ -1,6 +1,6 @@
 """두 컬렉션(300/50, 500/60)에 같은 질문을 던져 상위 결과를 나란히 본다 (동작 확인용).
 
-python indexing/03_search_test.py "질문"   # 질문을 직접 넣을 수도 있다
+python indexing/search_test.py "질문"   # 질문을 직접 넣을 수도 있다
 """
 import sys
 

@@ -1,13 +1,13 @@
 """골든셋으로 답변 품질을 잰다 (검색 → Gemini 답변 → Gemini 채점).
 
-python evaluation/02_answer_eval.py                              # 05_golden_set/golden_set.jsonl (20문항)
-python evaluation/02_answer_eval.py 05_golden_set/xxx.jsonl
-python evaluation/02_answer_eval.py --neighbors=0                # 이웃 청크 없이 상위 5개만 (비교용)
-python evaluation/02_answer_eval.py --answer-effort=default        # 답변의 생각 수준 (기본 low, E10 이전 방식은 default)
-python evaluation/02_answer_eval.py --mode=agent --small=gemini-3.5-flash-lite  # Agent의 분류·근거 판단만 가벼운 모델로 (E9)
-python evaluation/02_answer_eval.py --mode=agent                 # 기본 RAG 대신 Agent(agent/graph.py)로 답변 → agent_rows.jsonl
-python evaluation/02_answer_eval.py --prompt=base                # 프롬프트 규칙 묶음 (base / A / AB / ABC, 기본 ABC, agent/prompts.py)
-python evaluation/02_answer_eval.py 05_golden_set/golden_set_provided.jsonl --sample=30
+python evaluation/answer_eval.py                              # 05_golden_set/golden_set.jsonl (20문항)
+python evaluation/answer_eval.py 05_golden_set/xxx.jsonl
+python evaluation/answer_eval.py --neighbors=0                # 이웃 청크 없이 상위 5개만 (비교용)
+python evaluation/answer_eval.py --answer-effort=default        # 답변의 생각 수준 (기본 low, E10 이전 방식은 default)
+python evaluation/answer_eval.py --mode=agent --small=gemini-3.5-flash-lite  # Agent의 분류·근거 판단만 가벼운 모델로 (E9)
+python evaluation/answer_eval.py --mode=agent                 # 기본 RAG 대신 Agent(agent/graph.py)로 답변 → agent_rows.jsonl
+python evaluation/answer_eval.py --prompt=base                # 프롬프트 규칙 묶음 (base / A / AB / ABC, 기본 ABC, agent/prompts.py)
+python evaluation/answer_eval.py 05_golden_set/golden_set_provided.jsonl --sample=30
                                                                  # 무작위 30문항 (튜닝용 golden_set 문항은 빼고 뽑음, --seed=1로 다른 표본)
 
 검색은 확정한 기준 설정: 300/50 + Hybrid(5:5), 상위 5개 + 이웃 청크를 답변 LLM에 넘김 (리랭킹 없음).
@@ -28,7 +28,6 @@ python evaluation/02_answer_eval.py 05_golden_set/golden_set_provided.jsonl --sa
 """
 import datetime
 import hashlib
-import importlib
 import json
 import os
 import random
@@ -41,7 +40,7 @@ from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
-ret = importlib.import_module("01_retrieval_eval")  # 검색 평가의 정답 만들기·점수를 그대로 씀
+import retrieval_eval as ret  # noqa: E402  검색 평가의 정답 만들기·점수를 그대로 씀
 from common import EMBEDDING_MODEL_NAME, get_embeddings, log_cost  # noqa: E402
 from graph import ANSWER_EFFORT, CLASSIFY_EFFORT, GRADE_EFFORT, MAX_RETRIES, build_agent  # noqa: E402
 from prompts import ANSWER_PROMPT, extra_rules  # noqa: E402

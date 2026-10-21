@@ -70,7 +70,7 @@ index = [
 print(f"{len(docs)}개 문서 → {REVIEW_DIR}")
 
 # 그림 해석 중 숫자 검증을 못 통과한 것(check) 검토 목록
-# 맞으면 image_regions.json에서 그 항목의 status를 "ok"로 바꾸고 01_extract.py를 다시 돌린다.
+# 맞으면 image_regions.json에서 그 항목의 status를 "ok"로 바꾸고 extract.py를 다시 돌린다.
 IMAGE_REGIONS = EXTRACT_DIR / "image_regions.json"
 if IMAGE_REGIONS.exists():
     checks = [r for r in json.loads(IMAGE_REGIONS.read_text(encoding="utf-8")) if r["status"] == "check"]
@@ -79,7 +79,7 @@ if IMAGE_REGIONS.exists():
         "# 그림 해석 검토 목록",
         "",
         "Gemini가 쓴 숫자 중 OCR로 그림에서 찾지 못한 것이 있어 **본문에 넣지 않은** 항목이에요.",
-        "원본과 비교해서 맞으면 `image_regions.json`에서 그 항목의 `status`를 `\"ok\"`로 바꾸고 `01_extract.py`를 다시 돌려요.",
+        "원본과 비교해서 맞으면 `image_regions.json`에서 그 항목의 `status`를 `\"ok\"`로 바꾸고 `extract.py`를 다시 돌려요.",
         "",
     ]
     for n, r in enumerate(checks, start=1):

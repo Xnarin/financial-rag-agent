@@ -1,7 +1,7 @@
 """골든셋으로 검색 성능을 잰다.
 
-python evaluation/01_retrieval_eval.py                       # 05_golden_set/*.jsonl 전부, 파일마다 따로
-python evaluation/01_retrieval_eval.py 05_golden_set/xxx.jsonl  # 지정한 골든셋만
+python evaluation/retrieval_eval.py                       # 05_golden_set/*.jsonl 전부, 파일마다 따로
+python evaluation/retrieval_eval.py 05_golden_set/xxx.jsonl  # 지정한 골든셋만
 
 청킹 설정(300/50, 500/60) × 검색 방식(Similarity, MMR, BM25, Hybrid)을 난이도별·근거 유형별로 비교한다.
 검색 설정은 강의 평가 스크립트(10-rag-evalution-script)와 같다: k=5, fetch_k=20, MMR λ=0.5, Hybrid 0.5:0.5, BM25는 Kiwi 토큰화.

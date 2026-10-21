@@ -1,7 +1,7 @@
 # 그림 해석 검토 목록
 
 Gemini가 쓴 숫자 중 OCR로 그림에서 찾지 못한 것이 있어 **본문에 넣지 않은** 항목이에요.
-원본과 비교해서 맞으면 `image_regions.json`에서 그 항목의 `status`를 `"ok"`로 바꾸고 `01_extract.py`를 다시 돌려요.
+원본과 비교해서 맞으면 `image_regions.json`에서 그 항목의 `status`를 `"ok"`로 바꾸고 `extract.py`를 다시 돌려요.
 
 ## 1. additional/retirement_pension_2025.pdf 8쪽 (image)
 

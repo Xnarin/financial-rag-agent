@@ -12,7 +12,7 @@
    - 글자류 (글자 정보 없음)          → RapidOCR
    Gemini가 쓴 숫자는 그 영역의 OCR 결과 + pdfplumber 글자와 대조해 검증한다.
    (이미지 속 table은 우리 문서에선 전부 앱·홈택스 화면 캡처라 rapid-table 대신 Gemini로 보낸다.)
-3) 결과 → 04_extracted/image_regions.json (01_extract.py가 읽어서 본문에 넣는다)
+3) 결과 → 04_extracted/image_regions.json (extract.py가 읽어서 본문에 넣는다)
 """
 import base64
 import json
@@ -165,7 +165,7 @@ def find_formulas(fixed_boxes):
                            min(max(l["x1"] for l in col) + 5, right), max(l["bottom"] for l in g) + 25]
                     box = [round(v, 1) for v in box]
                     if any(overlap_ratio(f["bbox"], box) > 0.3 for f in fixed_boxes.get((source, i), [])):
-                        continue  # 03_gemini_tables.py가 이미 고친 영역 (주택연금 105쪽 등)
+                        continue  # gemini_tables.py가 이미 고친 영역 (주택연금 105쪽 등)
                     formulas.append({"source": source, "page": i, "label": "formula", "score": 1.0, "bbox": box})
     return formulas
 

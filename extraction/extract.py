@@ -9,8 +9,8 @@ BASE = Path(__file__).parent.parent  # 프로젝트 루트 (스크립트는 extr
 DATA_DIR = BASE / "01_data"
 OUT_PATH = BASE / "04_extracted" / "pages.jsonl"
 OUT_PATH.parent.mkdir(exist_ok=True)
-GEMINI_PATH = BASE / "04_extracted" / "gemini_tables.json"  # 03_gemini_tables.py 결과
-IMAGE_PATH = BASE / "04_extracted" / "image_regions.json"  # 04_image_regions.py 결과
+GEMINI_PATH = BASE / "04_extracted" / "gemini_tables.json"  # gemini_tables.py 결과
+IMAGE_PATH = BASE / "04_extracted" / "image_regions.json"  # image_regions.py 결과
 FIGURE_NAMES = {"chart": "그래프", "image": "그림", "table": "그림", "diagram": "그림", "formula": "수식"}
 # 그 밖(OCR한 text 등)은 "이미지 속 글자"
 
