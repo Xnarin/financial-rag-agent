@@ -25,7 +25,7 @@
 |:---|:---:|:---|
 | 1. 문서 추출 | ✅ 완료 | PDF → 페이지별 본문 + 마크다운 표 + 그래프·그림·수식 해석 |
 | 2. 청킹 · 임베딩 | ✅ 완료 | 구조 반영 청킹 300/50, 500/60 → `gemini-embedding-2` → Chroma |
-| 3. 검색 도구 | ⏳ 다음 | **300/50 + Hybrid(5:5) 확정, 리랭킹 없이 상위 5개를 답변 LLM에 전달** → 청크 + ID·출처 반환 |
+| 3. 검색 도구 | ✅ 완료 | `agent/search.py`: 300/50 + Hybrid(5:5) 상위 5개 + 이웃 청크 ±1 → 청크 ID·출처·순위 반환 (평가 스크립트도 같은 도구 사용) |
 | 4. Agent 설계 | ⬜ | 판단·행동 흐름, 종료 조건 |
 | 5. 평가 루프 | ⏳ 진행 | 검색 평가 완료 (골든셋 4종 437문항, 청킹 2 × 검색 4), 답변 평가 + 개선 (golden_set 20문항 correctness 0.725 → 0.950, 처음 보는 30문항 0.850 → 0.883) |
 
@@ -65,6 +65,8 @@ financial-rag-agent/
 │   ├── 02_embed.py          #   ② 청크 → gemini-embedding-2 → Chroma
 │   ├── 03_search_test.py    #   ③ 두 설정에 같은 질문 던져 비교
 │   └── common.py            #   벡터 DB 위치·임베딩 모델 설정
+├── agent/
+│   └── search.py            #   검색 도구 (Hybrid 상위 k개 + 이웃 청크, 청크 ID·출처 반환)
 ├── evaluation/
 │   ├── 01_retrieval_eval.py #   골든셋 검색 평가 (Similarity·MMR·BM25·Hybrid)
 │   └── 02_answer_eval.py    #   골든셋 답변 평가 (검색 → Gemini 답변 → Gemini 채점)
@@ -154,6 +156,28 @@ python indexing/03_search_test.py  # 두 설정 검색 비교 (질문을 인자�
 **청크 메타데이터:** `chunk_id`, `source`, `page`, `doc_group`(`glossary` / `standard_terms` / `life_guide` / `additional`), `block_type`(`text` / `table` / `figure`)
 
 > 기본 negative 세트는 **용어집 + 약관만 검색**하는 조건이라 `doc_group`으로 필터해서 써요.
+
+<br>
+
+## 🔎 검색 도구
+
+```bash
+python agent/search.py "주택연금은 무상 지원금인가요?"
+python agent/search.py "임의매매 금지" --groups=glossary,standard_terms --k=3 --neighbors=0
+```
+
+```python
+from search import SearchTool, BASIC_GROUPS, to_context, as_dicts   # agent/ 폴더를 sys.path에 넣고
+
+tool = SearchTool()                                   # Chroma·BM25 준비 (범위별 BM25는 처음 쓸 때 한 번 만듦)
+docs = tool.search("질문", k=5, neighbors=1, groups=None)   # groups=BASIC_GROUPS면 용어집 + 표준약관만
+to_context(docs)    # 답변 LLM에 넘길 글: 청크마다 [파일명 p쪽] 머리표
+as_dicts(docs)      # [{chunk_id, source, page, rank, text}, ...]  rank: 검색 순위 1~5, 이웃으로 붙은 청크는 0
+```
+
+- 설정은 검색·답변 평가로 정한 값 그대로: 300/50 청크, Hybrid(벡터 + BM25 Kiwi 토큰화, 5:5, 후보 각 20개) 상위 5개, 이웃 청크 ±1 (걸친 표는 모든 조각)
+- `01_retrieval_eval.py`(토큰화·청크 읽기)와 `02_answer_eval.py`(검색 전체)가 이 도구를 같이 써요. 분리 전후로 57문항의 검색 결과(상위 5개·넘기는 청크)가 똑같은 것을 확인했어요
+- 답변 평가 결과의 `chunk_ids`에 LLM에 넘긴 청크 ID가 저장돼요
 
 <br>
 

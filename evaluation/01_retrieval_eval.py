@@ -32,16 +32,16 @@ import sys
 import time
 from pathlib import Path
 
-from kiwipiepy import Kiwi
 from langchain_chroma import Chroma
 from langchain_classic.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
-from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "indexing"))
+sys.path.insert(0, str(BASE / "agent"))
 from common import COLLECTIONS, EMBEDDING_MODEL_NAME, chroma_dir, get_embeddings, log_cost  # noqa: E402
+from search import kiwi_tokenize, load_chunks  # noqa: E402
 
 GOLDEN_DIR = BASE / "05_golden_set"
 PAGES_PATH = BASE / "04_extracted" / "pages.jsonl"
@@ -56,13 +56,6 @@ GROUPS = {
     "context_type": ("paragraph", "table", "image", "formula", "none"),        # 근거 유형별 (있는 것만 표시)
 }
 
-kiwi = Kiwi()
-
-
-def kiwi_tokenize(text):
-    # 강의 스크립트와 같은 토큰화: 명사·동사·수식언·접사 + 외국어·숫자
-    return [t.form.lower() for t in kiwi.tokenize(text)
-            if t.tag.startswith(("N", "V", "M", "X")) or t.tag in {"SL", "SN"}]
 
 
 class QueryCache(Embeddings):
@@ -140,11 +133,6 @@ def score(docs, target):
         **{f"recall@{k}": len(covered(k)) / len(target) for k in (3, 5)},
         "mrr": 1 / first if first else 0.0,
     }
-
-
-def load_chunks(name):
-    return [Document(page_content=c["text"], metadata=c, id=c["chunk_id"])
-            for c in map(json.loads, (CHUNK_DIR / f"{name}.jsonl").open(encoding="utf-8"))]
 
 
 def build_searches(name, embeddings):

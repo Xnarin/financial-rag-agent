@@ -35,18 +35,14 @@ import sys
 import time
 from pathlib import Path
 
-from langchain_chroma import Chroma
-from langchain_classic.retrievers import EnsembleRetriever
-from langchain_community.retrievers import BM25Retriever
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
-ret = importlib.import_module("01_retrieval_eval")  # 검색 평가의 정답 만들기·점수·토큰화를 그대로 씀
-from common import EMBEDDING_MODEL_NAME, chroma_dir, get_embeddings, log_cost  # noqa: E402
+ret = importlib.import_module("01_retrieval_eval")  # 검색 평가의 정답 만들기·점수를 그대로 씀
+from common import EMBEDDING_MODEL_NAME, get_embeddings, log_cost  # noqa: E402
+from search import BASIC_GROUPS, CONFIG, FETCH_K, K, WEIGHTS, SearchTool, label, to_context  # noqa: E402
 
 LLM_MODEL = "gemini-3.6-flash"
-CONFIG = "chunks_300_50"
-BASIC_GROUPS = ["glossary", "standard_terms"]  # 기본 세트의 검색 범위
 
 ANSWER_PROMPT = """당신은 금융 문서를 근거로 답하는 상담 도우미입니다.
 
@@ -129,49 +125,10 @@ def is_basic(case_id):
     return case_id.startswith("NEG") or (m is not None and int(m.group(1)) <= 60)
 
 
-def build_hybrid(embeddings, groups=None):
-    # 검색 평가와 같은 Hybrid. groups를 주면 그 doc_group의 청크만 검색한다
-    vectorstore = Chroma(collection_name=CONFIG, embedding_function=embeddings, persist_directory=str(chroma_dir()))
-    chunks = [d for d in ret.load_chunks(CONFIG) if groups is None or d.metadata["doc_group"] in groups]
-    search_kwargs = {"k": ret.FETCH_K} | ({"filter": {"doc_group": {"$in": groups}}} if groups else {})
-    bm25 = BM25Retriever.from_documents(chunks, preprocess_func=ret.kiwi_tokenize, k=ret.FETCH_K)
-    return EnsembleRetriever(retrievers=[vectorstore.as_retriever(search_kwargs=search_kwargs), bm25],
-                             weights=ret.WEIGHTS, id_key="chunk_id")
-
-
-def label(doc):
-    return f"{Path(doc.metadata['source']).name} p{doc.metadata['page']}"
-
-
 def tokens(raw):
     # 출력 = 전체 - 입력 → 생각(thinking) 토큰까지 포함
     u = raw.usage_metadata
     return u["input_tokens"], u["total_tokens"] - u["input_tokens"]
-
-
-def same_table(a, b):
-    # 쪼개진 표 조각은 첫 줄(제목 또는 헤더)이 같다
-    return (a.metadata["block_type"] == b.metadata["block_type"] == "table" and a.metadata["source"] == b.metadata["source"]
-            and a.page_content.split("\n")[0] == b.page_content.split("\n")[0])
-
-
-def with_neighbors(docs, all_chunks, index, n):
-    # 검색된 청크마다 같은 문서의 앞뒤 n개 청크를 문서 순서대로 붙인다 (중복 제외, 검색 순서 유지)
-    # 범위 끝이 표 조각이면 그 표의 나머지 조각까지 넓힌다 (표 숫자가 조각마다 흩어져 있어서)
-    out, seen = [], set()
-    for d in docs:
-        i = index[d.metadata["chunk_id"]]
-        lo, hi = max(0, i - n), min(len(all_chunks) - 1, i + n)
-        while lo > 0 and same_table(all_chunks[lo - 1], all_chunks[lo]):
-            lo -= 1
-        while hi < len(all_chunks) - 1 and same_table(all_chunks[hi], all_chunks[hi + 1]):
-            hi += 1
-        for j in range(lo, hi + 1):
-            c = all_chunks[j]
-            if c.metadata["source"] == d.metadata["source"] and c.id not in seen:
-                seen.add(c.id)
-                out.append(c)
-    return out
 
 
 def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample):
@@ -190,18 +147,16 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample)
     new_questions = {g["question"] for g in golden} - embeddings.cache.keys()
     for g in golden:
         embeddings.embed_query(g["question"])
-    hybrids = {"all": build_hybrid(embeddings), "basic": build_hybrid(embeddings, BASIC_GROUPS)}
-    all_chunks = ret.load_chunks(CONFIG)  # 06_chunks 파일 순서 = 문서·쪽·청크 순서
-    index = {c.id: i for i, c in enumerate(all_chunks)}
+    tool = SearchTool(embeddings)
 
     # 1) 검색 + 답변 (문항마다 시간을 재려고 하나씩)
     rows, usage = [], {"answer": [0, 0], "judge": [0, 0]}
     for i, g in enumerate(golden, 1):
         start = time.perf_counter()
-        docs = hybrids["basic" if is_basic(g["case_id"]) else "all"].invoke(g["question"])[:ret.K]
+        context_docs = tool.search(g["question"], neighbors=neighbors, groups=BASIC_GROUPS if is_basic(g["case_id"]) else None)
         retrieval_ms = (time.perf_counter() - start) * 1000
-        context_docs = with_neighbors(docs, all_chunks, index, neighbors) if neighbors else docs
-        context = "\n\n".join(f"[{label(d)}]\n{d.page_content}" for d in context_docs)
+        docs = sorted((d for d in context_docs if d.metadata["rank"]), key=lambda d: d.metadata["rank"])  # 상위 5개
+        context = to_context(context_docs)
         target = targets.get(g["case_id"])
 
         start = time.perf_counter()
@@ -213,7 +168,8 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample)
         print(f"  [{i}/{len(golden)}] {g['case_id']} 답변 {answer_ms / 1000:.1f}초")
         rows.append({"run_id": run_id, "case_id": g["case_id"], "set": g["set"], "category": g["category"],
                      "context_type": g["context_type"], "question": g["question"], "answer": answer,
-                     "retrieved": [label(d) for d in docs], "context_chunks": len(context_docs), "context": context,
+                     "retrieved": [label(d) for d in docs], "chunk_ids": [d.id for d in context_docs],
+                     "context_chunks": len(context_docs), "context": context,
                      "retrieval_ms": retrieval_ms, "answer_ms": answer_ms, "target": target,
                      "retrieval_hit": ret.score(docs, target)["hit@5"] if target else None,  # 상위 5개
                      "context_hit": int(any(ret.is_relevant(d, target) for d in context_docs)) if target else None})
@@ -288,9 +244,9 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample)
             "run_id": run_id, "eval": "answer",
             "run_at": datetime.datetime.now().isoformat(timespec="seconds"),
             "golden_set": name, "count": len(rows),
-            "params": {"config": CONFIG, "chunks_md5": chunks_md5, "search": "Hybrid", "k": ret.K, "fetch_k": ret.FETCH_K,
+            "params": {"config": CONFIG, "chunks_md5": chunks_md5, "search": "Hybrid", "k": K, "fetch_k": FETCH_K,
                        "neighbors": neighbors, "prompt": prompt,
-                       "hybrid_weights": ret.WEIGHTS, "embedding": EMBEDDING_MODEL_NAME,
+                       "hybrid_weights": WEIGHTS, "embedding": EMBEDDING_MODEL_NAME,
                        "llm": LLM_MODEL, "judge": LLM_MODEL},
             "results": results,
             "tokens": usage, "cost_usd": round(cost, 4),
