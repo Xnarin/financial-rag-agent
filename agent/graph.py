@@ -3,6 +3,7 @@
 python agent/graph.py "주택연금은 무상 지원금인가요?"
 python agent/graph.py "수수료가 얼마야?" --groups=glossary,standard_terms
 python agent/graph.py --mermaid                                   # 그래프 구조도(mermaid) 출력
+python agent/graph.py "질문" --small=gemini-3.5-flash-lite          # 분류·근거 판단만 가벼운 모델로 (실험 E9)
 
 설계와 결정 이유는 README "Agent 설계" 참고. (v2: 기본 RAG와 비교한 뒤 고친 버전, 회고 22번)
 - classify : 답하는 방식을 정함. document(문서 질문) / clarify(대상이 특정 안 됨 → 근거 설명 + 되묻기)
@@ -111,24 +112,31 @@ class AgentState(TypedDict, total=False):
     searches: int
     input_tokens: int
     output_tokens: int
+    by_model: dict           # 모델별 [호출, 입력, 출력]
     trace: list              # 지나간 노드 순서
 
 
-def usage(state, raw):
+def usage(state, raw, model):
     # 호출 한 번의 토큰을 누적한다. 출력 = 전체 - 입력 (생각 토큰 포함)
+    # 노드마다 모델이 다를 수 있어서(실험 E9) 비용 계산용으로 모델별로도 따로 센다: {모델: [호출, 입력, 출력]}
     u = raw.usage_metadata
-    return {"llm_calls": state.get("llm_calls", 0) + 1,
-            "input_tokens": state.get("input_tokens", 0) + u["input_tokens"],
-            "output_tokens": state.get("output_tokens", 0) + u["total_tokens"] - u["input_tokens"]}
+    i, o = u["input_tokens"], u["total_tokens"] - u["input_tokens"]
+    by_model = {k: list(v) for k, v in state.get("by_model", {}).items()}
+    c = by_model.setdefault(model, [0, 0, 0])
+    c[0], c[1], c[2] = c[0] + 1, c[1] + i, c[2] + o
+    return {"llm_calls": state.get("llm_calls", 0) + 1, "by_model": by_model,
+            "input_tokens": state.get("input_tokens", 0) + i, "output_tokens": state.get("output_tokens", 0) + o}
 
 
-def build_agent(tool=None, prompt="ABC"):
+def build_agent(tool=None, prompt="ABC", small_model=None):
+    # small_model: 분류·근거 판단에 쓸 모델 (기본은 답변과 같은 LLM_MODEL). 답변 작성은 항상 LLM_MODEL
+    small = small_model or LLM_MODEL
     tool = tool or SearchTool()
     key = os.environ["GEMINI_API_KEY"]
     llm = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=key, timeout=120, max_retries=2)
-    classifier = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=key, timeout=60, max_retries=2,
+    classifier = ChatGoogleGenerativeAI(model=small, api_key=key, timeout=60, max_retries=2,
                                         reasoning_effort=CLASSIFY_EFFORT).with_structured_output(Classification, include_raw=True)
-    grader = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=key, timeout=60, max_retries=2,
+    grader = ChatGoogleGenerativeAI(model=small, api_key=key, timeout=60, max_retries=2,
                                     reasoning_effort=GRADE_EFFORT).with_structured_output(Grade, include_raw=True)
     extra = extra_rules(prompt)
 
@@ -136,7 +144,7 @@ def build_agent(tool=None, prompt="ABC"):
         out = classifier.invoke(CLASSIFY_PROMPT.format(question=state["question"]))
         return {"route": out["parsed"].route, "query": state["question"], "queries": [state["question"]],
                 "docs": [], "retries": 0, "searches": 0, "enough": True, "missing": "",
-                "trace": ["classify"], **usage(state, out["raw"])}
+                "trace": ["classify"], **usage(state, out["raw"], small)}
 
     def retrieve(state):
         new = tool.search(state["query"], groups=state.get("groups"))
@@ -149,7 +157,7 @@ def build_agent(tool=None, prompt="ABC"):
         out = grader.invoke(GRADE_PROMPT.format(tried=tried, context=to_context(state["docs"]), question=state["question"]))
         g = out["parsed"]
         return {"enough": g.enough, "missing": g.missing, "next_query": g.next_query,
-                "trace": state["trace"] + ["grade"], **usage(state, out["raw"])}
+                "trace": state["trace"] + ["grade"], **usage(state, out["raw"], small)}
 
     def rewrite(state):
         return {"query": state["next_query"], "queries": state["queries"] + [state["next_query"]],
@@ -160,7 +168,7 @@ def build_agent(tool=None, prompt="ABC"):
         if not state["enough"]:
             rules += PARTIAL_RULE.format(missing=state["missing"])
         msg = llm.invoke(ANSWER_PROMPT.format(extra=rules, context=to_context(state["docs"]), question=state["question"]))
-        return {"answer": msg.text, "trace": state["trace"] + ["generate"], **usage(state, msg)}
+        return {"answer": msg.text, "trace": state["trace"] + ["generate"], **usage(state, msg, LLM_MODEL)}
 
     def after_retrieve(state):
         # 되묻기·범위 밖 질문은 근거를 더 찾아도 답이 정해지지 않아서 재검색하지 않는다
@@ -190,7 +198,7 @@ if __name__ == "__main__":
     if "mermaid" in opts:
         print(build_agent(tool=object()).get_graph().draw_mermaid())
         sys.exit()
-    agent = build_agent()
+    agent = build_agent(small_model=opts.get("small") or None)
     result = agent.invoke({"question": " ".join(args) or "주택연금은 무상 지원금인가요?",
                            "groups": opts["groups"].split(",") if opts.get("groups") else None})
     print(f"경로: {' → '.join(result['trace'])} (분류 {result['route']}, 검색어 {result.get('queries')})")

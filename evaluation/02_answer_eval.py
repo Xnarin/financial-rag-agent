@@ -3,6 +3,7 @@
 python evaluation/02_answer_eval.py                              # 05_golden_set/golden_set.jsonl (20문항)
 python evaluation/02_answer_eval.py 05_golden_set/xxx.jsonl
 python evaluation/02_answer_eval.py --neighbors=0                # 이웃 청크 없이 상위 5개만 (비교용)
+python evaluation/02_answer_eval.py --mode=agent --small=gemini-3.5-flash-lite  # Agent의 분류·근거 판단만 가벼운 모델로 (E9)
 python evaluation/02_answer_eval.py --mode=agent                 # 기본 RAG 대신 Agent(agent/graph.py)로 답변 → agent_rows.jsonl
 python evaluation/02_answer_eval.py --prompt=base                # 프롬프트 규칙 묶음 (base / A / AB / ABC, 기본 ABC, agent/prompts.py)
 python evaluation/02_answer_eval.py 05_golden_set/golden_set_provided.jsonl --sample=30
@@ -91,7 +92,7 @@ def tokens(raw):
     return u["input_tokens"], u["total_tokens"] - u["input_tokens"]
 
 
-def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed):
+def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small):
     golden = [json.loads(line) for line in golden_path.open(encoding="utf-8") if line.strip()]
     name = golden_path.stem
     if sample:
@@ -112,7 +113,8 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
     for g in golden:
         embeddings.embed_query(g["question"])
     tool = SearchTool(embeddings)
-    agent = build_agent(tool, prompt) if mode == "agent" else None
+    agent = build_agent(tool, prompt, small) if mode == "agent" else None
+    by_model = {}  # Agent 모델별 [호출, 입력, 출력] (비용 계산용)
 
     # 1) 검색 + 답변 (문항마다 시간을 재려고 하나씩)
     rows, usage = [], {"answer": [0, 0], "judge": [0, 0]}
@@ -125,6 +127,8 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
             total_ms = (time.perf_counter() - start) * 1000
             context_docs, answer = out["docs"], out["answer"]
             calls, searches, tok = out["llm_calls"], out["searches"], (out["input_tokens"], out["output_tokens"])
+            for m, v in out["by_model"].items():
+                by_model[m] = [a + b for a, b in zip(by_model.get(m, [0, 0, 0]), v)]
             retrieval_ms = answer_ms = None
             extra_info = {"route": out["route"], "trace": out["trace"], "queries": out.get("queries"),
                           "retries": out.get("retries", 0)}
@@ -215,9 +219,12 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
     if new_questions:
         cost += log_cost(f"답변 평가 질문 임베딩 ({name})", EMBEDDING_MODEL_NAME, len(new_questions),
                          round(sum(map(len, new_questions)) * 0.66), note=f"추정 (글자 × 0.66), {run_id}")
-    for step, step_name in (("answer", "Agent 실행" if agent else "답변 생성"), ("judge", "답변 채점")):
-        calls = sum(r["llm_calls"] for r in rows) if step == "answer" else len(rows)
-        cost += log_cost(f"답변 평가 {step_name} ({name}, 프롬프트 {prompt})", LLM_MODEL, calls, *usage[step], note=run_id)
+    if agent:  # 노드마다 모델이 다를 수 있어서 모델별로 기록
+        for m, (calls, i, o) in by_model.items():
+            cost += log_cost(f"답변 평가 Agent 실행 ({name}, 프롬프트 {prompt})", m, calls, i, o, note=run_id)
+    else:
+        cost += log_cost(f"답변 평가 답변 생성 ({name}, 프롬프트 {prompt})", LLM_MODEL, len(rows), *usage["answer"], note=run_id)
+    cost += log_cost(f"답변 평가 답변 채점 ({name}, 프롬프트 {prompt})", LLM_MODEL, len(rows), *usage["judge"], note=run_id)
 
     # 청크 파일 지문: 청킹을 바꾸면 값이 달라져서 어떤 청크로 돌린 결과인지 구분된다
     chunks_md5 = hashlib.md5((ret.CHUNK_DIR / f"{CONFIG}.jsonl").read_bytes()).hexdigest()[:8]
@@ -230,7 +237,8 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
                        "neighbors": neighbors, "prompt": prompt,
                        "hybrid_weights": WEIGHTS, "embedding": EMBEDDING_MODEL_NAME,
                        "llm": LLM_MODEL, "judge": LLM_MODEL,
-                       **({"max_retries": MAX_RETRIES, "classify_effort": CLASSIFY_EFFORT, "grade_effort": GRADE_EFFORT}
+                       **({"max_retries": MAX_RETRIES, "classify_effort": CLASSIFY_EFFORT, "grade_effort": GRADE_EFFORT,
+                           "small_model": small or LLM_MODEL}
                           if agent else {})},
             "results": results,
             "tokens": usage, "cost_usd": round(cost, 4),
@@ -241,6 +249,7 @@ def main():
     neighbors = next((int(a.split("=")[1]) for a in sys.argv[1:] if a.startswith("--neighbors=")), 1)
     prompt = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--prompt=")), "ABC")
     mode = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--mode=")), "rag")
+    small = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--small=")), None)
     sample = next((int(a.split("=")[1]) for a in sys.argv[1:] if a.startswith("--sample=")), 0)
     seed = next((int(a.split("=")[1]) for a in sys.argv[1:] if a.startswith("--seed=")), 0)
     paths = [Path(p) for p in sys.argv[1:] if not p.startswith("--")] or [ret.GOLDEN_DIR / "golden_set.jsonl"]
@@ -248,7 +257,7 @@ def main():
     llm = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=os.environ["GEMINI_API_KEY"], timeout=120, max_retries=2)
     judge_llm = llm.with_structured_output(Judge, include_raw=True)
     for path in paths:
-        evaluate(path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed)
+        evaluate(path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small)
 
 
 if __name__ == "__main__":

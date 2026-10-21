@@ -30,7 +30,7 @@ def chroma_dir():
 
 COST_LOG = BASE / "docs" / "비용기록.md"
 # 1M 토큰당 달러 (입력, 출력). 출력에는 생각(thinking) 토큰도 포함. 2026-12-31까지 단가
-PRICES = {"gemini-3.6-flash": (0.75, 3.75), EMBEDDING_MODEL_NAME: (0.20, 0.0)}
+PRICES = {"gemini-3.6-flash": (0.75, 3.75), "gemini-3.5-flash-lite": (0.30, 2.50), EMBEDDING_MODEL_NAME: (0.20, 0.0)}
 
 
 def log_cost(task, model, calls, input_tokens, output_tokens=0, note=""):
