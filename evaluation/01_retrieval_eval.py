@@ -41,7 +41,7 @@ from langchain_core.embeddings import Embeddings
 
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "indexing"))
-from common import COLLECTIONS, EMBEDDING_MODEL_NAME, chroma_dir, get_embeddings  # noqa: E402
+from common import COLLECTIONS, EMBEDDING_MODEL_NAME, chroma_dir, get_embeddings, log_cost  # noqa: E402
 
 GOLDEN_DIR = BASE / "05_golden_set"
 PAGES_PATH = BASE / "04_extracted" / "pages.jsonl"
@@ -186,8 +186,13 @@ def evaluate(golden_path, embeddings):
           + (f" (정답 문서 없음: {', '.join(skipped)})" if skipped else ""))
     evaluated = [g for g in golden if g["case_id"] in targets]
     print(f"질문 임베딩 {len(evaluated)}개 만드는 중...")
+    new_questions = {g["question"] for g in evaluated} - embeddings.cache.keys()  # 이미 만든 건 과금 안 됨
     for g in evaluated:
         embeddings.embed_query(g["question"])
+    if new_questions:
+        log_cost(f"검색 평가 질문 임베딩 ({golden_path.stem})", EMBEDDING_MODEL_NAME, len(new_questions),
+                 round(sum(map(len, new_questions)) * 0.66), note="추정 (글자 × 0.66)")
+    run_id = f"retrieval-{golden_path.stem}-{datetime.datetime.now():%Y%m%d-%H%M%S}"
 
     out_dir = OUT_DIR / golden_path.stem
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -201,7 +206,7 @@ def evaluate(golden_path, embeddings):
                 docs = search(g["question"])
                 latency = (time.perf_counter() - start) * 1000
                 rows.append({
-                    "config": name, "strategy": s, "case_id": g["case_id"],
+                    "run_id": run_id, "config": name, "strategy": s, "case_id": g["case_id"],
                     "level": DIFFICULTY[g["difficulty"]], "context_type": g["context_type"],
                     **score(docs, targets[g["case_id"]]), "latency_ms": latency,
                     "retrieved": [f"{Path(d.metadata['source']).name} p{d.metadata['page']}" for d in docs],
@@ -218,6 +223,7 @@ def evaluate(golden_path, embeddings):
 
     # 실행 이력: 언제·어떤 조건으로 돌렸고 결과가 어땠는지 한 줄 ("a" = 덮어쓰지 않고 이어 붙임)
     summary = {
+        "run_id": run_id, "eval": "retrieval",
         "run_at": datetime.datetime.now().isoformat(timespec="seconds"),
         "golden_set": golden_path.stem,
         "count": len(evaluated),

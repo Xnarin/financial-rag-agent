@@ -1,4 +1,5 @@
-"""indexing 스크립트들이 같이 쓰는 설정: 벡터 DB 위치, 임베딩 모델."""
+"""indexing·evaluation 스크립트들이 같이 쓰는 설정: 벡터 DB 위치, 임베딩 모델, 비용 기록."""
+import datetime
 import os
 from pathlib import Path
 
@@ -25,6 +26,21 @@ def chroma_dir():
     fallback = Path(os.environ.get("PUBLIC", r"C:\Users\Public")) / "financial-rag-agent" / "chroma_db"
     print(f"[알림] 프로젝트 경로에 한글이 있어 벡터 DB를 영문 경로에 저장합니다: {fallback}")
     return fallback
+
+
+COST_LOG = BASE / "docs" / "비용기록.md"
+# 1M 토큰당 달러 (입력, 출력). 출력에는 생각(thinking) 토큰도 포함. 2026-12-31까지 단가
+PRICES = {"gemini-3.6-flash": (0.75, 3.75), EMBEDDING_MODEL_NAME: (0.20, 0.0)}
+
+
+def log_cost(task, model, calls, input_tokens, output_tokens=0, note=""):
+    # 유료 호출을 할 때마다 docs/비용기록.md 표에 한 줄 추가하고 달러 금액을 돌려준다
+    price_in, price_out = PRICES[model]
+    usd = (input_tokens * price_in + output_tokens * price_out) / 1_000_000
+    with COST_LOG.open("a", encoding="utf-8") as f:
+        f.write(f"| {datetime.date.today()} | {task} | `{model}` | {calls:,} | {input_tokens:,} | {output_tokens:,} | ${usd:.4f} | {note} |\n")
+    print(f"[비용] {task}: {calls}회, 입력 {input_tokens:,} / 출력 {output_tokens:,} 토큰 → ${usd:.4f} (docs/비용기록.md)")
+    return usd
 
 
 def get_embeddings():
