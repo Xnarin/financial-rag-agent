@@ -67,7 +67,9 @@ financial-rag-agent/
 │   └── common.py            #   벡터 DB 위치·임베딩 모델 설정
 ├── evaluation/
 │   └── 01_retrieval_eval.py #   골든셋 검색 평가 (Similarity·MMR·BM25·Hybrid)
-├── 07_eval/                 # 평가 결과 (설정별 표 txt + 질문별 jsonl)
+├── 07_eval/                 # 평가 결과 (아래 "평가 결과 관리" 참고)
+│   ├── runs.jsonl           #   실행 이력: 실행마다 요약 한 줄씩 쌓임
+│   └── {골든셋 이름}/       #   최신 실행 결과: 설정별 표 txt + 질문별 jsonl
 ├── chroma_db/               # 벡터 DB (커밋 안 함, 02_embed.py로 생성 — 한글 경로면 다른 곳, 아래 참고)
 ├── docs/
 │   ├── assignment.md        # 과제 설명
@@ -163,7 +165,7 @@ python evaluation/01_retrieval_eval.py 05_golden_set/xxx.jsonl
 
 > `kiwipiepy`가 없다는 오류가 나면 패키지를 설치한 가상환경의 파이썬으로 실행하세요 (예: `../../.venv/Scripts/python.exe evaluation/01_retrieval_eval.py`).
 
-- 결과: `07_eval/{골든셋 이름}/retrieval_{청킹}.txt`(난이도별), `..._by_type.txt`(근거 유형별), `retrieval_rows.jsonl`(질문별)
+- 결과: `07_eval/{골든셋 이름}/retrieval_{청킹}.txt`(난이도별), `..._by_type.txt`(근거 유형별), `retrieval_rows.jsonl`(질문별), `07_eval/runs.jsonl`(실행 이력)
 - 정답: 문서 + 쪽 (약관 `kofia-terms-…-{버전}-{조}`는 버전 → 약관 파일, 조 → 쪽 / 용어집은 파일 단위 / 정답 문서 없는 문항은 제외)
 - 검색 설정은 강의 스크립트와 같음: k=5, fetch_k=20, MMR λ=0.5, Hybrid 0.5:0.5, BM25는 Kiwi 토큰화
 - latency는 질문 임베딩을 뺀 **순수 검색 시간** (질문 임베딩은 한 번만 만들어 모든 방식이 공유)
@@ -223,6 +225,38 @@ python evaluation/01_retrieval_eval.py 05_golden_set/xxx.jsonl
 
 > 처음 기록한 500/60 수치(table_image Similarity hit@5 0.810 등)는 Chroma 색인 문제로 틀렸어요. 색인을 다시 만든 뒤 모든 골든셋을 다시 돌린 값이 위 표예요.
 > 골든셋별·난이도별·근거 유형별 표는 `07_eval/{골든셋 이름}/`에 있어요.
+
+**평가 결과 관리**
+
+결과는 DB 없이 JSONL 파일로 남겨요. 줄마다 JSON 하나라서 git diff로 바뀐 점이 보이고, pandas로 바로 읽을 수 있어요.
+
+| 파일 | 내용 | 저장 방식 | 용도 |
+|:---|:---|:---|:---|
+| `07_eval/runs.jsonl` | 실행 한 번 = 한 줄: 실행 시각, 골든셋, 문항 수, 조건(임베딩 모델·k·fetch_k·MMR λ·Hybrid 가중치), 청킹×검색별 hit@1·hit@5·recall@5·MRR·latency | **이어 붙임** (지워지지 않음) | 실행끼리 비교, 결정의 근거 |
+| `07_eval/{골든셋}/retrieval_rows.jsonl` | 질문 × 청킹 × 검색마다 한 줄: 점수 + 가져온 청크(파일·쪽) | 실행마다 **덮어씀** | 틀린 문항 찾기 |
+| `07_eval/{골든셋}/retrieval_*.txt` | 난이도별·근거 유형별 표 | 실행마다 **덮어씀** | 사람이 읽는 요약 |
+
+```json
+{"run_at": "2026-10-21T15:30:00", "golden_set": "golden_set", "count": 16,
+ "params": {"embedding": "gemini-embedding-2", "k": 5, "fetch_k": 20, "mmr_lambda": 0.5, "hybrid_weights": [0.5, 0.5]},
+ "results": {"chunks_300_50/Hybrid": {"hit@1": 0.562, "hit@5": 0.938, "recall@5": 0.844, "mrr": 0.74, "latency_ms": 17.0}, "...": {}}}
+```
+
+```python
+import pandas as pd
+
+# 실행 이력: 골든셋별로 300/50 Hybrid hit@5가 어떻게 바뀌었는지
+runs = pd.read_json("07_eval/runs.jsonl", lines=True)
+runs["hybrid_hit5"] = runs["results"].map(lambda r: r["chunks_300_50/Hybrid"]["hit@5"])
+print(runs[["run_at", "golden_set", "hybrid_hit5"]])
+
+# 질문별: Hybrid가 5개 안에 못 맞힌 문항
+rows = pd.read_json("07_eval/golden_set_all/retrieval_rows.jsonl", lines=True)
+print(rows[(rows.config == "chunks_300_50") & (rows.strategy == "Hybrid") & (rows["hit@5"] == 0)][["case_id", "retrieved"]])
+```
+
+- 조건(청킹·가중치·리랭커 등)을 바꿔 실험할 때는 `runs.jsonl`에 쌓인 줄끼리 비교해요. 질문별 결과까지 남기려면 돌리기 전에 `07_eval/{골든셋}/` 폴더를 복사해 두세요.
+- `runs.jsonl`은 이 기능을 추가한(2026-10-21) 뒤의 실행부터 기록돼요. 그전 결과는 위 표에 정리돼 있어요.
 
 <br>
 

@@ -21,8 +21,10 @@ python evaluation/01_retrieval_eval.py 05_golden_set/xxx.jsonl  # 지정한 골�
   (질문 임베딩을 방식마다 다시 부르면 API 호출이 3배가 되고, 처음 부른 방식만 느려 보여서 불공정하다)
 
 결과 → 07_eval/{골든셋 이름}/retrieval_{설정}.txt (난이도별), retrieval_{설정}_by_type.txt (근거 유형별),
-       retrieval_rows.jsonl (질문별 상세)
+       retrieval_rows.jsonl (질문별 상세, 실행마다 덮어씀)
+       07_eval/runs.jsonl (실행마다 요약 한 줄을 이어 붙임 → 이력)
 """
+import datetime
 import json
 import re
 import statistics
@@ -39,7 +41,7 @@ from langchain_core.embeddings import Embeddings
 
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "indexing"))
-from common import COLLECTIONS, chroma_dir, get_embeddings  # noqa: E402
+from common import COLLECTIONS, EMBEDDING_MODEL_NAME, chroma_dir, get_embeddings  # noqa: E402
 
 GOLDEN_DIR = BASE / "05_golden_set"
 PAGES_PATH = BASE / "04_extracted" / "pages.jsonl"
@@ -213,6 +215,22 @@ def evaluate(golden_path, embeddings):
     with (out_dir / "retrieval_rows.jsonl").open("w", encoding="utf-8") as f:
         for r in all_rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+    # 실행 이력: 언제·어떤 조건으로 돌렸고 결과가 어땠는지 한 줄 ("a" = 덮어쓰지 않고 이어 붙임)
+    summary = {
+        "run_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "golden_set": golden_path.stem,
+        "count": len(evaluated),
+        "params": {"embedding": EMBEDDING_MODEL_NAME, "k": K, "fetch_k": FETCH_K,
+                   "mmr_lambda": LAMBDA_MULT, "hybrid_weights": WEIGHTS},
+        "results": {
+            f"{c}/{s}": {m: round(statistics.mean(r[m] for r in all_rows if r["config"] == c and r["strategy"] == s), 3)
+                         for m in ("hit@1", "hit@5", "recall@5", "mrr", "latency_ms")}
+            for c in COLLECTIONS for s in STRATEGIES
+        },
+    }
+    with (OUT_DIR / "runs.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(summary, ensure_ascii=False) + "\n")
 
 
 def main():
