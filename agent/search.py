@@ -42,6 +42,18 @@ def load_chunks(name=CONFIG):
             for c in map(json.loads, (CHUNK_DIR / f"{name}.jsonl").open(encoding="utf-8"))]
 
 
+def bm25_docs(chunks):
+    # 약관 머리말("[약관 이름] 제○조(제목)")은 벡터 검색·LLM에는 도움이 되지만, 키워드 검색(BM25)에서는
+    # 같은 약관의 모든 청크에 반복되는 단어라 잡음이 된다 (E12: "외국집합투자증권" 약관 이름이 "집합투자규약"을 밀어냄)
+    # → BM25 색인에는 머리말을 뺀 본문만 넣는다
+    out = []
+    for c in chunks:
+        h = c.metadata.get("header")
+        text = c.page_content[len(h) + 1:] if h and c.page_content.startswith(h) else c.page_content
+        out.append(Document(page_content=text, metadata=c.metadata, id=c.id))
+    return out
+
+
 def label(doc):
     return f"{Path(doc.metadata['source']).name} p{doc.metadata['page']}"
 
@@ -72,7 +84,7 @@ class SearchTool:
         if key not in self.hybrids:
             chunks = [c for c in self.chunks if not groups or c.metadata["doc_group"] in groups]
             search_kwargs = {"k": FETCH_K} | ({"filter": {"doc_group": {"$in": list(groups)}}} if groups else {})
-            bm25 = BM25Retriever.from_documents(chunks, preprocess_func=kiwi_tokenize, k=FETCH_K)
+            bm25 = BM25Retriever.from_documents(bm25_docs(chunks), preprocess_func=kiwi_tokenize, k=FETCH_K)
             self.hybrids[key] = EnsembleRetriever(
                 retrievers=[self.vectorstore.as_retriever(search_kwargs=search_kwargs), bm25],
                 weights=WEIGHTS, id_key="chunk_id")
@@ -100,7 +112,8 @@ class SearchTool:
         """상위 k개 + 이웃 청크를 돌려준다. metadata["rank"]: 검색 순위(1~k), 이웃으로 붙은 청크는 0."""
         top = self.hybrid(groups).invoke(query)[:k]
         ranks = {d.metadata["chunk_id"]: r for r, d in enumerate(top, 1)}
-        docs = self.with_neighbors(top, neighbors) if neighbors else top
+        # 넘기는 글은 항상 원래 청크(머리말 포함)로
+        docs = self.with_neighbors(top, neighbors) if neighbors else [self.chunks[self.index[d.metadata["chunk_id"]]] for d in top]
         # 원본 청크(self.chunks)를 건드리지 않게 복사해서 순위를 붙인다
         return [Document(page_content=d.page_content, id=d.metadata["chunk_id"],
                          metadata={k_: v for k_, v in d.metadata.items() if k_ != "text"}

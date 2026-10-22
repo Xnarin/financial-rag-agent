@@ -9,6 +9,8 @@
 - 본문: RecursiveCharacterTextSplitter로 쪽 단위로 나눈다 (출처 쪽 번호를 정확히 남기려고).
 - 용어집: 용어 하나 = 청크 하나 ("[금융용어] 용어: 설명"), 뒤쪽 출처 목록 쪽은 뺀다.
   extraction/glossary_terms.py가 만든 04_extracted/glossary_terms.jsonl을 쓴다 (청크 크기 설정과 상관없음).
+- 표준약관: 청크 맨 앞에 "[약관 이름] 제○조(제목)" 머리말을 붙인다. 조항 중간에서 시작하는 청크도
+  어느 약관 몇 조인지 알 수 있게 (쪽이 넘어가도 지금 조항을 기억). 메타데이터 article에도 저장.
 """
 import json
 import re
@@ -26,6 +28,7 @@ CONFIGS = [(300, 50), (500, 60)]
 
 FIGURE_TAGS = ("그래프", "그림", "수식", "이미지 속 글자")
 NOTE = re.compile(r"^\s*(주\s*[:：0-9)]|자료\s*[:：]|<?\s*출처\s*[:：]|<\s*자료|\*|※|\(단위|<단위)")
+ARTICLE = re.compile(r"^\s*(제\s*\d+\s*조(?:의\s*\d+)?\s*\([^)\n]{1,40}\))", re.M)  # 약관 조항 제목
 CAPTION = re.compile(r"^\s*(\[|<|〔)?\s*(표|그림|그래프)\s*[\dⅠ-Ⅹ]|\(단위|<단위|단위\s*[:：]")
 
 
@@ -152,6 +155,18 @@ def chunk_page(page, patterns, splitter, size):
     return chunks
 
 
+def add_article_header(source, kind, text, extra, article):
+    # 약관 청크 앞에 "[약관 이름] 제○조(제목)". 청크가 조항 제목으로 시작하면 약관 이름만 붙인다
+    name = re.sub(r"^\d+_|\.pdf$", "", Path(source).name)
+    heads = ARTICLE.findall(text)
+    starts = bool(ARTICLE.match(text))
+    current = heads[0] if starts else article.get(source, "")
+    header = f"[{name}]" if starts or not current else f"[{name}] {current}"
+    if heads:
+        article[source] = heads[-1]
+    return kind, f"{header}\n{text}", {**(extra or {}), "article": current, "header": header}
+
+
 def main():
     pages = [json.loads(line) for line in PAGES_PATH.open(encoding="utf-8")]
     headers_footers = find_headers_footers(pages)
@@ -163,12 +178,15 @@ def main():
         splitter = RecursiveCharacterTextSplitter(chunk_size=size, chunk_overlap=overlap)
         name = f"chunks_{size}_{overlap}"
         rows = []
+        article = {}  # 약관 문서 → 지금 읽고 있는 조항 제목 (쪽이 넘어가도 이어짐)
         for page in pages:
             if page["source"] == GLOSSARY_SOURCE:
                 # 용어 하나 = 청크 하나. 출처 목록 쪽(용어가 없는 쪽)은 청크를 안 만든다
                 chunks = [("text", f"[금융용어] {t['term']}: {t['definition']}", t) for t in glossary[page["page"]]]
             else:
                 chunks = [(kind, text, None) for kind, text in chunk_page(page, headers_footers[page["source"]], splitter, size)]
+            if page["source"].startswith("standard_terms/"):
+                chunks = [add_article_header(page["source"], kind, text, term, article) for kind, text, term in chunks]
             for n, (kind, text, term) in enumerate(chunks):
                 rows.append({
                     "chunk_id": f"{size}_{overlap}:{page['source']}:p{page['page']}:{n}",
@@ -177,7 +195,9 @@ def main():
                     "doc_group": doc_group(page["source"]),
                     "block_type": kind,  # text / table / figure
                     "text": text,
-                    **({"term": term["term"], "dic_id": term["dic_id"]} if term else {}),
+                    **({"term": term["term"], "dic_id": term["dic_id"]} if term and "dic_id" in term else {}),
+                    **({"article": term["article"]} if term and term.get("article") else {}),
+                    **({"header": term["header"]} if term and term.get("header") else {}),  # BM25에서는 뺀다 (search.bm25_docs)
                 })
         with (OUT_DIR / f"{name}.jsonl").open("w", encoding="utf-8") as f:
             for row in rows:

@@ -41,7 +41,7 @@ BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "indexing"))
 sys.path.insert(0, str(BASE / "agent"))
 from common import COLLECTIONS, EMBEDDING_MODEL_NAME, chroma_dir, get_embeddings, log_cost  # noqa: E402
-from search import kiwi_tokenize, load_chunks  # noqa: E402
+from search import bm25_docs, kiwi_tokenize, load_chunks  # noqa: E402
 
 GOLDEN_DIR = BASE / "05_golden_set"
 PAGES_PATH = BASE / "04_extracted" / "pages.jsonl"
@@ -137,7 +137,7 @@ def score(docs, target):
 
 def build_searches(name, embeddings):
     vectorstore = Chroma(collection_name=name, embedding_function=embeddings, persist_directory=str(chroma_dir()))
-    bm25 = BM25Retriever.from_documents(load_chunks(name), preprocess_func=kiwi_tokenize, k=FETCH_K)
+    bm25 = BM25Retriever.from_documents(bm25_docs(load_chunks(name)), preprocess_func=kiwi_tokenize, k=FETCH_K)
     hybrid = EnsembleRetriever(retrievers=[vectorstore.as_retriever(search_kwargs={"k": FETCH_K}), bm25],
                                weights=WEIGHTS, id_key="chunk_id")
     return {
