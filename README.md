@@ -182,10 +182,11 @@ financial-rag-agent/
 ├── 06_chunks/          청크 (300/50, 500/60)
 ├── 07_eval/            평가 결과 (runs.jsonl = 실행 이력, {세트}/ = 문항별 결과)
 │
-├── extraction/         1. PDF → 본문 · 표 · 그림 해석
-├── indexing/           2. 청킹 · 임베딩 (common.py = DB 위치 · 비용 기록)
+├── extraction/         1. extract.py 추출 · make_review_md.py 비교 문서 · gemini_tables.py · image_regions.py
+├── indexing/           2. chunk.py 청킹 · embed.py 임베딩 · common.py DB 위치·비용 기록
 ├── agent/              3. search.py 검색 도구 · prompts.py 답변 프롬프트 · graph.py Agent
-├── evaluation/         4. 01 검색 평가 · 02 답변 평가 (기본 RAG / Agent)
+├── evaluation/         4. retrieval_eval.py 검색 평가 · answer_eval.py 답변 평가 (기본 RAG / Agent)
+├── make_golden_set.py  제공 답안(03_answers) → 골든셋 변환
 │
 ├── docs/               문서 안내(README) · 실험계획 · 실험기록 · 추출_청킹 · 비용기록 · 과제 설명
 └── 회고.md             단계마다 만난 문제와 해결 과정 (26개)
