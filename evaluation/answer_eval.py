@@ -6,6 +6,7 @@ python evaluation/answer_eval.py --neighbors=0                # 이웃 청크 �
 python evaluation/answer_eval.py --answer-effort=default        # 답변의 생각 수준 (기본 low, E10 이전 방식은 default)
 python evaluation/answer_eval.py --mode=agent --small=gemini-3.5-flash-lite  # Agent의 분류·근거 판단만 가벼운 모델로 (E9)
 python evaluation/answer_eval.py --mode=agent                 # 기본 RAG 대신 Agent(agent/graph.py)로 답변 → agent_rows.jsonl
+python evaluation/answer_eval.py --cases=POS006,NEG033            # 지정한 문항만
 python evaluation/answer_eval.py --prompt=base                # 프롬프트 규칙 묶음 (base / A / AB / ABC, 기본 ABC, agent/prompts.py)
 python evaluation/answer_eval.py 05_golden_set/golden_set_provided.jsonl --sample=30
                                                                  # 무작위 30문항 (튜닝용 golden_set 문항은 빼고 뽑음, --seed=1로 다른 표본)
@@ -107,9 +108,15 @@ def with_retry(fn, what):
             time.sleep(wait)
 
 
-def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small, answer_effort):
+def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small, answer_effort, cases=None):
     golden = [json.loads(line) for line in golden_path.open(encoding="utf-8") if line.strip()]
+    # 기준 답안이 문서 밖의 내용(상식·계산)을 요구해서 평가에서 빼는 문항 (이유는 파일 안에)
+    excluded = json.loads((ret.GOLDEN_DIR / "excluded_cases.json").read_text(encoding="utf-8"))
+    golden = [g for g in golden if g["case_id"] not in excluded]
     name = golden_path.stem
+    if cases:  # 지정한 문항만 (예: 오답 문항으로 프롬프트 수정 효과 보기)
+        golden = [g for g in golden if g["case_id"] in cases]
+        name = f"{name}_cases{len(golden)}"
     if sample:
         # 확인용 표본: 프롬프트를 고칠 때 본 golden_set 문항은 빼고, 항상 같은 문항이 뽑히게 seed 고정
         tuning = {json.loads(line)["case_id"] for line in (ret.GOLDEN_DIR / "golden_set.jsonl").open(encoding="utf-8")}
@@ -294,6 +301,7 @@ def main():
     answer_effort = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--answer-effort=")), None)
     sample = next((int(a.split("=")[1]) for a in sys.argv[1:] if a.startswith("--sample=")), 0)
     seed = next((int(a.split("=")[1]) for a in sys.argv[1:] if a.startswith("--seed=")), 0)
+    cases = next((set(a.split("=")[1].split(",")) for a in sys.argv[1:] if a.startswith("--cases=")), None)
     paths = [Path(p) for p in sys.argv[1:] if not p.startswith("--")] or [ret.GOLDEN_DIR / "golden_set.jsonl"]
     embeddings = ret.QueryCache(get_embeddings())
     key = os.environ["GEMINI_API_KEY"]
@@ -306,7 +314,7 @@ def main():
     judge_llm = ChatGoogleGenerativeAI(model=LLM_MODEL, api_key=key, timeout=120,
                                        max_retries=2).with_structured_output(Judge, include_raw=True)
     for path in paths:
-        evaluate(path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small, answer_effort)
+        evaluate(path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small, answer_effort, cases)
 
 
 if __name__ == "__main__":

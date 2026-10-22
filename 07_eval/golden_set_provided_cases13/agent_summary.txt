@@ -1,0 +1,40 @@
+##### golden_set_provided_cases13 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / Agent / gemini-3.6-flash (agent-golden_set_provided_cases13-20261022-145302)
+
+=== 전체 ===
+         count: 13
+   correctness: 0.692
+  faithfulness: 1.0
+  must_include: 0.718
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 0.769
+context_chunks: 21.692
+     llm_calls: 3.615
+      searches: 1.615
+  input_tokens: 12426.769
+ output_tokens: 1370.077
+      total_ms: 11838.568
+            성공: 12
+         검색 실패: 1
+         답변 실패: 0
+
+=== positive ===
+         count: 13
+   correctness: 0.692
+  faithfulness: 1.0
+  must_include: 0.718
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 0.769
+context_chunks: 21.692
+     llm_calls: 3.615
+      searches: 1.615
+  input_tokens: 12426.769
+ output_tokens: 1370.077
+      total_ms: 11838.568
+            성공: 12
+         검색 실패: 1
+         답변 실패: 0
+
+=== 실패 문항 ===
+ADD-HF09 [검색 실패] 검색 근거에 14.4%, 10.8% 수치 및 DSR 70% 이상 집단 내 취약차주 비중에 대한 설명이 포함되어 있지 않아서, 답변이 해당 내용을 문서에서 찾을 수 없다고 응답하였습니다. 이에 따라 기준 답안의 필수 포함 항목인 DSR 70% 이상 집단 비교와 14.4%·10.8% 수치 해석이 모두 누락되어 correctness는 0점입니다.

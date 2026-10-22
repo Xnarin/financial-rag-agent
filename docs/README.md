@@ -39,7 +39,7 @@
 | [04_extracted/index.md](../04_extracted/index.md) | 문서별 추출 요약 + **원문 캡처 ↔ 추출 결과 비교 문서** 링크 |
 | [04_extracted/review/](../04_extracted/review/) | 문서별 비교 문서 (쪽마다 원문 캡처와 추출 결과를 나란히) |
 | [04_extracted/image_check.md](../04_extracted/image_check.md) | 숫자 검증을 통과하지 못한 그림 해석 (사람 검토용) |
-| [05_golden_set/](../05_golden_set/) | 골든셋 4종 (직접 작성 table_image 189 · paragraph 100, 제공 provided 180 · 표본 20) |
+| [05_golden_set/](../05_golden_set/) | 골든셋 4종 (직접 작성 table_image 189 · paragraph 100, 제공 provided 180 · 표본 20). `excluded_cases.json` = 답변 평가에서 뺀 2문항과 이유 |
 | [07_eval/runs.jsonl](../07_eval/runs.jsonl) | 실행 이력. 실행 한 번 = 한 줄 (`run_id`, 설정, 요약 결과, 토큰, 비용) |
 | `07_eval/{세트}/` | 세트별 최신 결과. `retrieval_*.txt`·`retrieval_rows.jsonl`(검색), `answer_*`(기본 RAG), `agent_*`(Agent) |
 

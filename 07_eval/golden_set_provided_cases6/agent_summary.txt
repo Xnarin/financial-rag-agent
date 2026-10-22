@@ -1,0 +1,58 @@
+##### golden_set_provided_cases6 / chunks_300_50 Hybrid / 이웃 청크 ±1 / 프롬프트 ABC / Agent / gemini-3.6-flash (agent-golden_set_provided_cases6-20261022-150431)
+
+=== 전체 ===
+         count: 6
+   correctness: 0.75
+  faithfulness: 1.0
+  must_include: 0.75
+      must_not: 0.167
+   behavior_ok: 0.833
+   citation_ok: 1
+context_chunks: 13
+     llm_calls: 3.167
+      searches: 1.333
+  input_tokens: 7026.667
+ output_tokens: 703.5
+      total_ms: 9083.584
+            성공: 5
+         검색 실패: 0
+         답변 실패: 1
+
+=== positive ===
+         count: 2
+   correctness: 1.0
+  faithfulness: 1.0
+  must_include: 1
+      must_not: 0
+   behavior_ok: 1
+   citation_ok: 1
+context_chunks: 13
+     llm_calls: 3
+      searches: 1
+  input_tokens: 6325.5
+ output_tokens: 1006.5
+      total_ms: 12817.729
+            성공: 2
+         검색 실패: 0
+         답변 실패: 0
+
+=== negative ===
+         count: 4
+   correctness: 0.625
+  faithfulness: 1.0
+  must_include: 0.625
+      must_not: 0.25
+   behavior_ok: 0.75
+   citation_ok: None
+context_chunks: 13
+     llm_calls: 3.25
+      searches: 1.5
+  input_tokens: 7377.25
+ output_tokens: 552
+      total_ms: 7216.511
+            성공: 3
+         검색 실패: 0
+         답변 실패: 1
+
+=== 실패 문항 ===
+NEG013 [답변 실패] 질문에서 계좌 종류와 가입자의 사망 여부가 명확히 제시되지 않았으므로 되물어서 상황을 확인해야 하지만, 이를 확인하지 않고 연금저축계좌 및 사망 상황으로 단정하여 승계가 가능하다고 답변했습니다.
