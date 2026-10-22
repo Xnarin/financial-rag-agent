@@ -9,7 +9,7 @@
 - 본문: RecursiveCharacterTextSplitter로 쪽 단위로 나눈다 (출처 쪽 번호를 정확히 남기려고).
 - 용어집: 용어 하나 = 청크 하나 ("[금융용어] 용어: 설명"), 뒤쪽 출처 목록 쪽은 뺀다.
   extraction/glossary_terms.py가 만든 04_extracted/glossary_terms.jsonl을 쓴다 (청크 크기 설정과 상관없음).
-- 표준약관: 청크 맨 앞에 "[약관 이름] 제○조(제목)" 머리말을 붙인다. 조항 중간에서 시작하는 청크도
+- 표준약관: 끝의 "출처 목록"(약관 이름 / 조항 제목 / URL) 줄은 뺀다. 청크 맨 앞에 "[약관 이름] 제○조(제목)" 머리말을 붙인다. 조항 중간에서 시작하는 청크도
   어느 약관 몇 조인지 알 수 있게 (쪽이 넘어가도 지금 조항을 기억). 메타데이터 article에도 저장.
 """
 import json
@@ -143,6 +143,10 @@ def table_chunks(lines, head, notes, size):
 def chunk_page(page, patterns, splitter, size):
     # 머리글·꼬리말을 먼저 지운다 (쪽 번호가 표 제목에 딸려 들어가지 않게)
     page = {**page, "content": "\n".join(remove_headers_footers(page["content"].splitlines(), patterns))}
+    if page["source"].startswith("standard_terms/"):
+        # 약관 끝의 "출처 목록"(약관 이름 / 조항 제목 / URL)은 내용 없이 조항 제목만 있어서 검색을 가로챈다 (E13)
+        page["content"] = "\n".join(l for l in page["content"].splitlines()
+                                    if l.strip() != "출처 목록" and "law.kofia" not in l and "Seq=" not in l)
     chunks = []
     for kind, lines, head, notes in attach_context(split_blocks(page)):
         if kind == "text":

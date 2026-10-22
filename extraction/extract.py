@@ -289,11 +289,66 @@ def extract_page(page, gemini=(), figures=()):
     }
 
 
+def find_gutter(page):
+    # 2단 편집(보고서)인지: 표 밖 본문 글자만 보고, 가운데(45~55%)에 단어가 거의 걸치지 않는 세로 빈 띠가 있고
+    # 같은 높이에 왼쪽·오른쪽 모두 글자가 있는 줄이 많으면 2단. → (빈 띠 x, 빈 띠에 걸친 단어들)
+    words = [d for d in page.extract_words() if d["x1"] < page.width * .9]  # 오른쪽 세로 탭 제외
+    if len(words) < 300:
+        return None
+    boxes = [t.bbox for t in page.find_tables()]
+    words = [d for d in words if not any(b[0] <= d["x0"] and d["x1"] <= b[2] and b[1] <= d["top"] and d["bottom"] <= b[3]
+                                         for b in boxes)]
+    if len(words) < 300:
+        return None
+    x = min(range(int(page.width * .45), int(page.width * .55), 2),
+            key=lambda x: sum(1 for d in words if d["x0"] < x < d["x1"]))
+    cross = [d for d in words if d["x0"] < x < d["x1"]]
+    if any(b[0] < x < b[2] for b in boxes):
+        return None  # 두 단에 걸친 큰 표가 있으면 나누지 않는다 (표가 반으로 잘림, 주택 정책금융 21쪽)
+    rows = defaultdict(lambda: [0, 0])
+    for d in words:
+        rows[round(d["top"] / 3)][d["x1"] > x] += 1
+    both = sum(1 for l, r in rows.values() if l >= 2 and r >= 2)
+    return (x, cross) if len(cross) <= max(3, len(words) * .03) and both >= 8 else None
+
+
+def merge_parts(parts):
+    return {
+        "text": "\n".join(h["text"] for h in parts).strip(),
+        "tables": [t for h in parts for t in h["tables"]],
+        "table_sources": [s for h in parts for s in h["table_sources"]],
+        "figures": [f for h in parts for f in h["figures"]],
+        "content": "\n\n".join(h["content"] for h in parts if h["content"]).strip(),
+    }
+
+
+def extract_columns(page, gutter, gemini=(), figures=()):
+    # 2단 편집 쪽: 위 제목(두 단에 걸침) → 왼쪽 단 → 오른쪽 단 → 아래 각주(두 단에 걸침) 순서로 읽는다.
+    # 한 번에 읽으면 같은 높이의 왼쪽·오른쪽 문장이 한 줄로 섞인다 (예: 자영업자 보고서 고위험가구 정의).
+    x, cross = gutter
+    head = max((d["bottom"] for d in cross if d["top"] < page.height * .3), default=page.bbox[1])
+    foot = min((d["top"] for d in cross if d["top"] > page.height * .6), default=page.bbox[3])
+    side = page.width * .87  # 오른쪽 세로 탭("금융안정 상황" 등)은 뺀다. 본문은 84%까지, 탭은 89%부터 (자영업자·주택정책금융 보고서)
+    mid = lambda b: (b[0] + b[2]) / 2
+    regions = [
+        lambda o: o["top"] < head,
+        lambda o: head <= o["top"] < foot and mid((o["x0"], 0, o["x1"])) < x,
+        lambda o: head <= o["top"] < foot and mid((o["x0"], 0, o["x1"])) >= x,
+        lambda o: o["top"] >= foot,
+    ]
+    fig_in = lambda f, r: r({"x0": f["bbox"][0], "x1": f["bbox"][2], "top": f["bbox"][1]})
+    parts = [extract_page(page.filter(lambda o, r=r: r(o) and not (o.get("object_type") == "char" and o["x0"] > side)),
+                          gemini, [f for f in figures if fig_in(f, r)])
+             for r in regions]
+    return merge_parts(parts)
+
+
 def extract_spread(page, gemini=(), figures=()):
     # 두 쪽을 펼쳐서 한 장에 담은 가로로 긴 쪽은 왼쪽 반, 오른쪽 반을 따로 읽고 이어 붙인다.
     # 한 번에 읽으면 위→아래 순서로 정렬되면서 왼쪽 쪽과 오른쪽 쪽 문장이 섞인다.
     if page.width <= page.height:
-        return extract_page(page, gemini, figures)
+        gutter = find_gutter(page)
+        return extract_columns(page, gutter, gemini, figures) if gutter else extract_page(page, gemini, figures)
     # crop으로 자르면 그 안에서 표 영역을 다시 crop할 때 곡선 테두리가 사라져서,
     # 객체 가운데가 어느 쪽에 있는지로 나눈다.
     mid = (page.bbox[0] + page.bbox[2]) / 2
