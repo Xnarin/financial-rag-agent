@@ -7,6 +7,8 @@
        청크 크기를 넘으면 행 단위로 나누고, 조각마다 제목과 헤더를 반복한다.
 - 그림·그래프·수식 해석: 쪼개지 않고 통째로 한 청크 (설명 문장 포함).
 - 본문: RecursiveCharacterTextSplitter로 쪽 단위로 나눈다 (출처 쪽 번호를 정확히 남기려고).
+- 용어집: 용어 하나 = 청크 하나 ("[금융용어] 용어: 설명"), 뒤쪽 출처 목록 쪽은 뺀다.
+  extraction/glossary_terms.py가 만든 04_extracted/glossary_terms.jsonl을 쓴다 (청크 크기 설정과 상관없음).
 """
 import json
 import re
@@ -17,6 +19,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 BASE = Path(__file__).parent.parent  # 프로젝트 루트 (스크립트는 indexing/ 안에 있음)
 PAGES_PATH = BASE / "04_extracted" / "pages.jsonl"
+GLOSSARY_PATH = BASE / "04_extracted" / "glossary_terms.jsonl"
+GLOSSARY_SOURCE = "financial_glossary_readable.pdf"
 OUT_DIR = BASE / "06_chunks"
 CONFIGS = [(300, 50), (500, 60)]
 
@@ -151,13 +155,21 @@ def chunk_page(page, patterns, splitter, size):
 def main():
     pages = [json.loads(line) for line in PAGES_PATH.open(encoding="utf-8")]
     headers_footers = find_headers_footers(pages)
+    glossary = defaultdict(list)  # 쪽 → [(용어, 설명, 번호)]
+    for t in map(json.loads, GLOSSARY_PATH.open(encoding="utf-8")):
+        glossary[t["page"]].append(t)
     OUT_DIR.mkdir(exist_ok=True)
     for size, overlap in CONFIGS:
         splitter = RecursiveCharacterTextSplitter(chunk_size=size, chunk_overlap=overlap)
         name = f"chunks_{size}_{overlap}"
         rows = []
         for page in pages:
-            for n, (kind, text) in enumerate(chunk_page(page, headers_footers[page["source"]], splitter, size)):
+            if page["source"] == GLOSSARY_SOURCE:
+                # 용어 하나 = 청크 하나. 출처 목록 쪽(용어가 없는 쪽)은 청크를 안 만든다
+                chunks = [("text", f"[금융용어] {t['term']}: {t['definition']}", t) for t in glossary[page["page"]]]
+            else:
+                chunks = [(kind, text, None) for kind, text in chunk_page(page, headers_footers[page["source"]], splitter, size)]
+            for n, (kind, text, term) in enumerate(chunks):
                 rows.append({
                     "chunk_id": f"{size}_{overlap}:{page['source']}:p{page['page']}:{n}",
                     "source": page["source"],
@@ -165,6 +177,7 @@ def main():
                     "doc_group": doc_group(page["source"]),
                     "block_type": kind,  # text / table / figure
                     "text": text,
+                    **({"term": term["term"], "dic_id": term["dic_id"]} if term else {}),
                 })
         with (OUT_DIR / f"{name}.jsonl").open("w", encoding="utf-8") as f:
             for row in rows:

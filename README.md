@@ -34,7 +34,7 @@
 
 | 영역 | 결과 | 설명 |
 |:---|:---|:---|
-| 검색 | 437문항 hit@5 **0.938** | 300/50 청크 + Hybrid(벡터·BM25 5:5) |
+| 검색 | 437문항 hit@5 **0.945** | 300/50 청크 + Hybrid(벡터·BM25 5:5) + 용어집은 용어 하나 = 청크 하나 |
 | 답변 | 정답률 **0.725 → 0.950** | 표 제목 붙이기 + 이웃 청크 + 프롬프트(결론 → 근거 → 주의점) |
 | Agent | 처음 보는 120문항 정답률 **0.854 → 0.904** | 같은 조건의 기본 RAG보다 4개 셋 모두 높음. 비용·시간 1.7배 |
 | 비용 | 답변 출력 토큰 **−58%**, 시간 −38% | 답변 생각 수준을 `low`로. Agent 문항당 $0.009 · 9초 |
@@ -117,6 +117,7 @@ flowchart TD
 | E9-a | 가벼운 모델 | 분류·근거 판단을 Flash-Lite로 | 비용 −12%, 되묻기를 못 함 | 안 씀 |
 | E10 | 답변 생각 수준 | 기본 → `low` | 출력 토큰 −58%, 시간 −38%, 정답률 유지 | **채택** |
 | E10-b | 최종 비교 | 같은 조건 기본 RAG vs Agent, 120문항 | 0.854 vs 0.904 | 아래 5번 |
+| E11 | 용어집 용어 단위 청킹 | 300자 단위(용어 4~5개 섞임 + 출처 목록) → 용어 하나 = 청크 하나 | 용어 정의 쪽 hit@1 0.394 → 0.727, hit@5 0.545 → 0.848 | **채택** |
 
 <br>
 
@@ -182,14 +183,14 @@ financial-rag-agent/
 ├── 06_chunks/          청크 (300/50, 500/60)
 ├── 07_eval/            평가 결과 (runs.jsonl = 실행 이력, {세트}/ = 문항별 결과)
 │
-├── extraction/         1. extract.py 추출 · make_review_md.py 비교 문서 · gemini_tables.py · image_regions.py
+├── extraction/         1. extract.py 추출 · make_review_md.py 비교 문서 · gemini_tables.py · image_regions.py · glossary_terms.py 용어집 용어 단위
 ├── indexing/           2. chunk.py 청킹 · embed.py 임베딩 · common.py DB 위치·비용 기록
 ├── agent/              3. search.py 검색 도구 · prompts.py 답변 프롬프트 · graph.py Agent
 ├── evaluation/         4. retrieval_eval.py 검색 평가 · answer_eval.py 답변 평가 (기본 RAG / Agent)
 ├── make_golden_set.py  제공 답안(03_answers) → 골든셋 변환
 │
 ├── docs/               문서 안내(README) · 실험계획 · 실험기록 · 추출_청킹 · 비용기록 · 과제 설명
-└── 회고.md             단계마다 만난 문제와 해결 과정 (26개)
+└── 회고.md             단계마다 만난 문제와 해결 과정 (27개)
 ```
 
 <br>
