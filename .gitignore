@@ -4,3 +4,4 @@ __pycache__/
 .env
 .ipynb_checkpoints/
 chroma_db/
+_partial_*.jsonl

@@ -92,6 +92,21 @@ def tokens(raw):
     return u["input_tokens"], u["total_tokens"] - u["input_tokens"]
 
 
+TEMPORARY = ("503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "overloaded", "high demand", "Deadline", "timed out")
+
+
+def with_retry(fn, what):
+    # Gemini가 붐빌 때(503 high demand 등) 기다렸다 다시. 180문항을 돌리다 중간에 멈춘 적이 있어서 추가
+    for wait in (30, 60, 120, 240, None):
+        try:
+            return fn()
+        except Exception as e:
+            if wait is None or not any(s in str(e) for s in TEMPORARY):
+                raise
+            print(f"  {what}: {str(e)[:80]} → {wait}초 뒤 다시")
+            time.sleep(wait)
+
+
 def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample, mode, seed, small, answer_effort):
     golden = [json.loads(line) for line in golden_path.open(encoding="utf-8") if line.strip()]
     name = golden_path.stem
@@ -116,14 +131,36 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
     agent = build_agent(tool, prompt, small, answer_effort) if mode == "agent" else None
     by_model = {}  # Agent 모델별 [호출, 입력, 출력] (비용 계산용)
 
+    # 중간 저장: 답변이 끝난 문항은 바로 파일에 적어 두고, 중간에 멈추면 다시 실행할 때 건너뛴다.
+    # 같은 설정(질문 세트·모드·프롬프트·이웃·모델·생각 수준·청크 파일)일 때만 이어서 한다
+    out_dir = ret.OUT_DIR / name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    chunks_md5 = hashlib.md5((ret.CHUNK_DIR / f"{CONFIG}.jsonl").read_bytes()).hexdigest()[:8]  # 청크 파일 지문 (runs.jsonl에도 기록)
+    sig = hashlib.md5(json.dumps([mode, prompt, neighbors, small, answer_effort, chunks_md5]).encode()).hexdigest()[:8]
+    partial = out_dir / f"_partial_{mode}_{sig}.jsonl"
+    done = {}
+    if partial.exists():
+        for r in map(json.loads, partial.open(encoding="utf-8")):
+            r["target"] = {tuple(t) for t in r["target"]} if r["target"] else None
+            done[r["case_id"]] = r
+        print(f"  중간 저장에서 이어서: {len(done)}문항은 건너뜀")
+
     # 1) 검색 + 답변 (문항마다 시간을 재려고 하나씩)
     rows, usage = [], {"answer": [0, 0], "judge": [0, 0]}
     for i, g in enumerate(golden, 1):
+        if g["case_id"] in done:
+            r = done[g["case_id"]]
+            rows.append(r)
+            usage["answer"][0] += r["input_tokens"]
+            usage["answer"][1] += r["output_tokens"]
+            for m, v in (r.pop("by_model", None) or {}).items():
+                by_model[m] = [a + b for a, b in zip(by_model.get(m, [0, 0, 0]), v)]
+            continue
         groups = BASIC_GROUPS if is_basic(g["case_id"]) else None
         target = targets.get(g["case_id"])
         start = time.perf_counter()
         if agent:
-            out = agent.invoke({"question": g["question"], "groups": groups})
+            out = with_retry(lambda: agent.invoke({"question": g["question"], "groups": groups}), g["case_id"])
             total_ms = (time.perf_counter() - start) * 1000
             context_docs, answer = out["docs"], out["answer"]
             calls, searches, tok = out["llm_calls"], out["searches"], (out["input_tokens"], out["output_tokens"])
@@ -135,7 +172,8 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
         else:
             context_docs = tool.search(g["question"], neighbors=neighbors, groups=groups)
             retrieval_ms = (time.perf_counter() - start) * 1000
-            msg = llm.invoke(ANSWER_PROMPT.format(extra=extra, context=to_context(context_docs), question=g["question"]))
+            msg = with_retry(lambda: llm.invoke(ANSWER_PROMPT.format(extra=extra, context=to_context(context_docs),
+                                                                     question=g["question"])), g["case_id"])
             total_ms = (time.perf_counter() - start) * 1000
             answer_ms = total_ms - retrieval_ms
             answer, calls, searches, tok = msg.text, 1, 1, tokens(msg)
@@ -156,14 +194,19 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
                      **extra_info,
                      "retrieval_hit": int(any(ret.is_relevant(d, target) for d in docs)) if target else None,  # 검색 순위 청크
                      "context_hit": int(any(ret.is_relevant(d, target) for d in context_docs)) if target else None})
+        with partial.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({**rows[-1], "target": sorted(target) if target else None,
+                                **({"by_model": out["by_model"]} if agent else {})}, ensure_ascii=False) + "\n")
 
-    # 2) 채점 (4개씩 동시에)
+    # 2) 채점 (4개씩 동시에). 붐벼서 실패한 문항은 하나씩 다시
     print("채점 중...")
-    judged = judge_llm.batch([
-        JUDGE_PROMPT.format(question=g["question"], context=r["context"], reference=g["target_answer"],
-                            behavior=g["expected_behavior"], must_include=g["must_include"],
-                            must_not_include=g["must_not_include"], answer=r["answer"])
-        for g, r in zip(golden, rows)], config={"max_concurrency": 4})
+    prompts = [JUDGE_PROMPT.format(question=g["question"], context=r["context"], reference=g["target_answer"],
+                                   behavior=g["expected_behavior"], must_include=g["must_include"],
+                                   must_not_include=g["must_not_include"], answer=r["answer"])
+               for g, r in zip(golden, rows)]
+    judged = judge_llm.batch(prompts, config={"max_concurrency": 4}, return_exceptions=True)
+    judged = [with_retry(lambda p=p: judge_llm.invoke(p), f"채점 {r['case_id']}") if isinstance(j, Exception) else j
+              for p, r, j in zip(prompts, rows, judged)]
 
     for r, j in zip(rows, judged):
         for k, v in zip((0, 1), tokens(j["raw"])):
@@ -187,13 +230,12 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
         r["outcome"] = "성공" if passed else "검색 실패" if r["context_hit"] == 0 else "답변 실패"
         del r["context"]
 
-    # 3) 저장
-    out_dir = ret.OUT_DIR / name
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # 3) 저장 (다 끝났으니 중간 저장 파일은 지운다)
     prefix = "agent" if agent else "answer"
     with (out_dir / f"{prefix}_rows.jsonl").open("w", encoding="utf-8") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    partial.unlink(missing_ok=True)
 
     metrics = ("correctness", "faithfulness", "must_include", "must_not", "behavior_ok", "citation_ok",
                "context_chunks", "llm_calls", "searches", "input_tokens", "output_tokens", "total_ms")
@@ -226,8 +268,6 @@ def evaluate(golden_path, embeddings, llm, judge_llm, neighbors, prompt, sample,
         cost += log_cost(f"답변 평가 답변 생성 ({name}, 프롬프트 {prompt})", LLM_MODEL, len(rows), *usage["answer"], note=run_id)
     cost += log_cost(f"답변 평가 답변 채점 ({name}, 프롬프트 {prompt})", LLM_MODEL, len(rows), *usage["judge"], note=run_id)
 
-    # 청크 파일 지문: 청킹을 바꾸면 값이 달라져서 어떤 청크로 돌린 결과인지 구분된다
-    chunks_md5 = hashlib.md5((ret.CHUNK_DIR / f"{CONFIG}.jsonl").read_bytes()).hexdigest()[:8]
     with (ret.OUT_DIR / "runs.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps({
             "run_id": run_id, "eval": "answer", "mode": mode,
